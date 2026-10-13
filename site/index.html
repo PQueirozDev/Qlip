@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Qlip</title>
+  <meta name="description" content="Qlip é um gravador de tela e de clipes instantâneos para Windows, nativo e open source. NVENC, replay em memória, áudio do jogo e do microfone, leve o bastante para rodar junto com o jogo." />
+  <meta property="og:title" content="Qlip: grave a tela e salve clipes sem pesar no jogo" />
+  <meta property="og:description" content="Gravador nativo para Windows com NVENC, replay instantâneo (F8) e áudio sincronizado. Open source, sem conta e sem nuvem." />
+  <meta property="og:image" content="https://qlipapp.vercel.app/assets/og-cover.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://qlipapp.vercel.app/" />
+  <meta name="twitter:image" content="https://qlipapp.vercel.app/assets/og-cover.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#09090b" />
+  <link rel="icon" href="assets/favicon.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="page">
+  <div class="frame">
+    <span class="corner bl"></span><span class="corner br"></span>
+
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Qlip, início">
+        <img src="assets/icon.png" alt="" width="26" height="26" />
+        <span>QLIP</span>
+      </a>
+      <nav class="nav" aria-label="Seções">
+        <a href="#replay">replay</a>
+        <a href="#recursos">recursos</a>
+        <a href="#desempenho">desempenho</a>
+        <a href="#codigo">código</a>
+      </nav>
+      <div class="actions">
+        <a class="btn-ghost" data-link="repo" href="#" target="_blank" rel="noopener noreferrer">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          <span>GitHub</span>
+        </a>
+        <a class="btn" href="#download">Download</a>
+      </div>
+    </header>
+
+    <main>
+      <!-- Hero: o nome atrás, a janela do app no meio, o contorno na frente -->
+      <section id="top" class="hero">
+        <span class="brk"></span>
+        <div class="stage">
+          <div class="text-col">
+            <p class="kicker"><span class="dot"></span> v<span data-version>0.1.0</span> · open source · Windows</p>
+            <h1 class="word word-back">QLIP</h1>
+          </div>
+          <figure class="hero-app">
+            <img src="assets/app-main.png" width="396" height="459" alt="Janela principal do Qlip gravando: status Gravando, cronômetro 00:00:04, frames perdidos e botões Parar, Salvar clipe, Configurações e Biblioteca." />
+          </figure>
+          <p class="hero-lede">Grave a tela e salve os últimos segundos do jogo com uma tecla. Nativo, leve e open source: o encoder da placa de vídeo faz o trabalho pesado.</p>
+        </div>
+        <div class="hero-keys mono" aria-label="Atalhos">
+          <span><kbd>F9</kbd> grava</span>
+          <span><kbd>F10</kbd> liga o replay</span>
+          <span><kbd>F8</kbd> salva o clipe</span>
+        </div>
+      </section>
+
+      <!-- Replay: a linha do tempo com o buffer e o F8 -->
+      <section id="replay" class="section replay-sec">
+        <div class="sec-head">
+          <p class="eyebrow">replay instantâneo</p>
+          <h2>Aconteceu? Aperte F8.</h2>
+          <p class="sub">Com o replay ligado, o Qlip guarda os últimos segundos já comprimidos pela placa de vídeo, em memória. O F8 salva esse trecho num MP4 e a gravação continua, sem pausa.</p>
+        </div>
+        <div class="rp">
+          <span class="brk"></span>
+          <div class="rp-head">
+            <div class="rp-status"><i class="led"></i><b>replay ativo</b><span class="mono dim" data-rp-info>últimos 30 s em memória</span></div>
+            <div class="rp-durations" role="group" aria-label="Duração do replay">
+              <button type="button" class="chip" data-seconds="15" aria-pressed="false">15 s</button>
+              <button type="button" class="chip on" data-seconds="30" aria-pressed="true">30 s</button>
+              <button type="button" class="chip" data-seconds="60" aria-pressed="false">60 s</button>
+              <button type="button" class="chip" data-seconds="120" aria-pressed="false">120 s</button>
+            </div>
+          </div>
+          <div class="rp-track" data-track>
+            <div class="rp-frames" data-frames></div>
+            <div class="rp-window" data-window><span class="mono">buffer</span></div>
+            <div class="rp-now mono">agora</div>
+          </div>
+          <div class="rp-foot">
+            <button type="button" class="btn big rp-save" data-save><kbd>F8</kbd> Salvar clipe</button>
+            <ol class="rp-clips mono" data-clips aria-live="polite"><li class="empty">nenhum clipe salvo ainda</li></ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- Recursos -->
+      <section id="recursos" class="section flush">
+        <div class="sec-head pad">
+          <p class="eyebrow">recursos</p>
+          <h2>Tudo que um gravador precisa. Nada além.</h2>
+        </div>
+        <div class="grid">
+          <article class="cell">
+            <p class="ck"><span class="i">●</span> gravação</p>
+            <h3>Gravação contínua</h3>
+            <p class="cp">F9 grava e para. H.264 pelo NVENC, 30, 60 ou 120 FPS constantes, resolução original, 1080p ou 720p, quatro níveis de qualidade.</p>
+            <div class="mock">
+              <div class="m-rec"><span class="rec-dot"></span><b class="mono">00:12:48</b><span class="pill">1080p60</span><span class="pill">12 Mbps</span></div>
+            </div>
+          </article>
+
+          <article class="cell">
+            <p class="ck"><span class="i">↺</span> replay</p>
+            <h3>Clipes sem gravar tudo</h3>
+            <p class="cp">O buffer guarda pacotes já codificados, nunca frames brutos. O clipe sempre começa num keyframe e abre em qualquer player.</p>
+            <div class="mock">
+              <div class="m-buffer"><span style="--w:22%"></span><span style="--w:30%"></span><span style="--w:18%"></span><span class="cut" style="--w:30%">clipe</span></div>
+            </div>
+          </article>
+
+          <article class="cell">
+            <p class="ck"><span class="i">♪</span> áudio</p>
+            <h3>Jogo e microfone</h3>
+            <p class="cp">Som do sistema e microfone, cada um com volume próprio, sincronizados com o vídeo pelo mesmo relógio. Desconectou o fone? Ele reconecta sozinho.</p>
+            <div class="mock">
+              <div class="m-audio">
+                <div><span>jogo</span><i style="--w:72%"></i><b class="mono">100%</b></div>
+                <div><span>mic</span><i style="--w:48%"></i><b class="mono">80%</b></div>
+              </div>
+            </div>
+          </article>
+
+          <article class="cell">
+            <p class="ck"><span class="i">▣</span> alvo</p>
+            <h3>Monitor ou só o jogo</h3>
+            <p class="cp">Escolha o monitor ou grave só a janela do jogo. Mudou a resolução no meio da partida? A gravação continua.</p>
+            <div class="mock">
+              <div class="m-screens"><span class="sc on">Monitor 1<em>principal</em></span><span class="sc">Monitor 2</span><span class="sc game">Só o jogo</span></div>
+            </div>
+          </article>
+
+          <article class="cell">
+            <p class="ck"><span class="i">⟲</span> segurança</p>
+            <h3>À prova de queda</h3>
+            <p class="cp">A gravação é escrita em fragmentos. Se o PC travar ou o app fechar, o arquivo é recuperado na próxima abertura.</p>
+            <div class="mock">
+              <div class="m-frags"><i></i><i></i><i></i><i></i><i></i><i class="lost"></i><span class="mono">recuperado · perde no máximo ~1 s</span></div>
+            </div>
+          </article>
+
+          <article class="cell">
+            <p class="ck"><span class="i">⌘</span> atalhos</p>
+            <h3>Teclas do seu jeito</h3>
+            <p class="cp">Troque qualquer atalho clicando e apertando a tecla. Se outro app já usa a combinação, o Qlip avisa em vez de falhar calado.</p>
+            <div class="mock">
+              <div class="m-keys"><span><em>gravar</em><kbd>F9</kbd></span><span><em>replay</em><kbd>F10</kbd></span><span><em>clipe</em><kbd>F8</kbd></span></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Por dentro -->
+      <section id="interface" class="section shots-sec">
+        <div class="sec-head">
+          <p class="eyebrow">por dentro</p>
+          <h2>Preto, azul e direto ao ponto.</h2>
+          <p class="sub">Interface nativa do Windows, sem navegador embutido. As telas abaixo são o app de verdade.</p>
+        </div>
+        <div class="shots">
+          <figure class="shot">
+            <img src="assets/app-settings.png" width="672" height="607" loading="lazy" alt="Configurações do Qlip: pastas, gravação (o que gravar, resolução, FPS, qualidade, monitor), clipe de replay, áudio com volumes e dispositivo, atalhos e iniciar com o Windows." />
+            <figcaption class="mono">configurações</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="assets/app-library.png" width="736" height="509" loading="lazy" alt="Biblioteca do Qlip listando um clipe e uma gravação com tipo, duração, tamanho e data, e botões Abrir, Mostrar na pasta, Excluir e Atualizar." />
+            <figcaption class="mono">biblioteca</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- Desempenho -->
+      <section id="desempenho" class="section">
+        <div class="sec-head">
+          <p class="eyebrow">desempenho</p>
+          <h2>Medido, não prometido.</h2>
+          <p class="sub">Números reais de uma RTX 2060 com i7-10700F, em 1080p60 e qualidade média. A carga foi um padrão de teste em movimento, não um jogo; o impacto em FPS de jogos ainda não foi medido.</p>
+        </div>
+        <dl class="stats">
+          <div><dt>em repouso</dt><dd><b>22 MB</b><span>RAM · CPU 0%</span></dd></div>
+          <div><dt>gravando</dt><dd><b>2,7%</b><span>CPU · NVENC 11%</span></dd></div>
+          <div><dt>10 minutos</dt><dd><b>36.187</b><span>frames · 19 perdidos (0,05%)</span></dd></div>
+          <div><dt>memória estável</dt><dd><b>0,56</b><span>MB/min de variação em 10 min</span></dd></div>
+        </dl>
+      </section>
+
+      <!-- Privacidade -->
+      <section id="privacidade" class="section">
+        <div class="sec-head">
+          <p class="eyebrow">privacidade</p>
+          <h2>Seu PC, seus vídeos.</h2>
+          <p class="sub">Tudo roda local. Não existe conta, servidor nem telemetria.</p>
+        </div>
+        <dl class="spec">
+          <div><dt>sem conta</dt><dd>Abre e grava. Nada de login, assinatura, anúncio ou atualização obrigatória.</dd></div>
+          <div><dt>sem nuvem</dt><dd>Gravações e clipes ficam em <code>Vídeos\Qlip</code>. Nada sai do seu computador.</dd></div>
+          <div><dt>sem telemetria</dt><dd>O app não manda dados para lugar nenhum. O log fica numa pasta sua, em <code>%APPDATA%\Qlip</code>.</dd></div>
+          <div><dt>respeita DRM</dt><dd>Conteúdo protegido contra captura não é gravado, e o Qlip não tenta contornar isso nem anti-cheat.</dd></div>
+        </dl>
+      </section>
+
+      <!-- Código aberto -->
+      <section id="codigo" class="section code-sec">
+        <div class="code-copy">
+          <p class="eyebrow">código aberto</p>
+          <h2>Leia, compile, mude.</h2>
+          <p class="sub">O Qlip é open source sob a licença MIT. C++20 nativo, sem Electron e sem servidor local: captura pela GPU, encode pelo NVENC e escrita em disco em threads separadas.</p>
+          <ul class="stack mono">
+            <li>C++20</li><li>Win32</li><li>Windows Graphics Capture</li><li>NVENC</li><li>FFmpeg (LGPL)</li><li>WASAPI</li><li>Direct3D 11</li><li>CMake</li>
+          </ul>
+          <p class="sub small">Achou um bug ou tem uma ideia? Abra uma issue ou mande um pull request.</p>
+        </div>
+        <div class="term">
+          <div class="win-bar"><span class="lights"><i></i><i></i><i></i></span><span class="win-title">PowerShell</span><button type="button" class="copy" data-copy>copiar</button></div>
+<pre class="mono" data-copy-src><span class="dim"># Visual Studio 2022 Build Tools + CMake 3.24+</span>
+git clone <span data-repo-url>https://github.com/PQueirozDev/Qlip</span>
+cd Qlip
+pwsh scripts/fetch-ffmpeg.ps1     <span class="dim"># FFmpeg LGPL (headers, libs, DLLs)</span>
+cmake -S . -B build -A x64
+cmake --build build --config Release</pre>
+        </div>
+      </section>
+
+      <!-- Download -->
+      <section id="download" class="section dl-sec">
+        <span class="brk"></span>
+        <img class="dl-icon" src="assets/icon.png" width="112" height="112" alt="" />
+        <p class="eyebrow">download · v<span data-version>0.1.0</span></p>
+        <h2 class="dl-title">Pronto pra gravar.</h2>
+        <p class="sub">Versão portátil para Windows 10 e 11 (x64). Extraia o zip e abra o <code>Qlip.exe</code>, sem instalação. Precisa de uma placa NVIDIA com NVENC.</p>
+        <div class="dl-btns">
+          <a class="btn big" data-link="download" href="#">Baixar para Windows <span class="mono">.zip</span></a>
+          <a class="btn-ghost big" data-link="releases" href="#" target="_blank" rel="noopener noreferrer">Todas as versões</a>
+        </div>
+        <p class="fine mono">sem conta · sem nuvem · sem telemetria · MIT</p>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <span class="brand small"><img src="assets/icon.png" alt="" width="20" height="20" /> QLIP</span>
+      <span class="mono dim">© 2026 Pedro Queiroz · código aberto</span>
+      <a class="mono" data-link="repo" href="#" target="_blank" rel="noopener noreferrer">github</a>
+    </footer>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

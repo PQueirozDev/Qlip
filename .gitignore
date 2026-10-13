@@ -1,0 +1,12 @@
+# Build e pacotes gerados
+build/
+dist/
+out/
+.vs/
+*.user
+
+# FFmpeg (baixado por scripts/fetch-ffmpeg.ps1; não vai para o repositório)
+third_party/ffmpeg/
+
+# Site (Vercel)
+site/.vercel/
