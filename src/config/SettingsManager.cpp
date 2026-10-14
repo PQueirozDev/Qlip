@@ -120,13 +120,19 @@ bool SettingsManager::load() {
         settings_.clipsFolder = fromUtf8(readOr<std::string>(j, "clipsFolder", ""));
 
         // Lê como 64 bits para não truncar valores grandes antes de validar a faixa.
-        auto validKey = [](std::uint64_t key) { return key >= 0x01 && key <= 0xFE; };
+        // Tecla nos 8 bits baixos, modificadores (3 bits) a partir do bit 16; qualquer outro bit invalida.
+        auto validKey = [](std::uint64_t key) {
+            const auto vk = key & 0xFF;
+            return vk >= 0x01 && vk <= 0xFE && (key & ~std::uint64_t{0x700FF}) == 0;
+        };
         const auto save = readOr<std::uint64_t>(j, "hotkeySave", defaults.hotkeySave);
         const auto record = readOr<std::uint64_t>(j, "hotkeyRecord", defaults.hotkeyRecord);
         const auto replayKey = readOr<std::uint64_t>(j, "hotkeyReplay", defaults.hotkeyReplay);
+        const auto overlay = readOr<std::uint64_t>(j, "hotkeyOverlay", defaults.hotkeyOverlay);
         if (validKey(save)) settings_.hotkeySave = static_cast<unsigned>(save);
         if (validKey(record)) settings_.hotkeyRecord = static_cast<unsigned>(record);
         if (validKey(replayKey)) settings_.hotkeyReplay = static_cast<unsigned>(replayKey);
+        if (validKey(overlay)) settings_.hotkeyOverlay = static_cast<unsigned>(overlay);
 
         settings_.startWithWindows = readOr(j, "startWithWindows", defaults.startWithWindows);
     } catch (const nlohmann::json::exception&) {
@@ -159,6 +165,7 @@ bool SettingsManager::save() const {
         {"hotkeySave", settings_.hotkeySave},
         {"hotkeyRecord", settings_.hotkeyRecord},
         {"hotkeyReplay", settings_.hotkeyReplay},
+        {"hotkeyOverlay", settings_.hotkeyOverlay},
         {"startWithWindows", settings_.startWithWindows},
     };
 

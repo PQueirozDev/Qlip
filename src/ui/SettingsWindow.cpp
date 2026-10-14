@@ -9,6 +9,7 @@
 
 #include "audio/AudioDevices.h"
 #include "capture/Monitors.h"
+#include "ui/Dropdown.h"
 #include "ui/Theme.h"
 #include "utils/Logger.h"
 
@@ -62,8 +63,14 @@ bool isModifierKey(UINT vk) {
 
 }  // namespace
 
-std::wstring SettingsWindow::keyName(UINT virtualKey) {
+std::wstring SettingsWindow::keyName(unsigned hotkey) {
+    const UINT virtualKey = hotkeyVk(hotkey);
     if (virtualKey == 0) return L"Nenhuma";
+    std::wstring prefix;
+    const unsigned mods = hotkeyMods(hotkey);
+    if (mods & MOD_CONTROL) prefix += L"Ctrl + ";
+    if (mods & MOD_ALT) prefix += L"Alt + ";
+    if (mods & MOD_SHIFT) prefix += L"Shift + ";
     // Teclas estendidas (setas, Insert, Delete...) precisam do bit de extensão no lParam.
     const bool extended = virtualKey == VK_INSERT || virtualKey == VK_DELETE || virtualKey == VK_HOME ||
                           virtualKey == VK_END || virtualKey == VK_PRIOR || virtualKey == VK_NEXT ||
@@ -72,8 +79,8 @@ std::wstring SettingsWindow::keyName(UINT virtualKey) {
     LONG lParam = static_cast<LONG>(scan) << 16;
     if (extended) lParam |= 1L << 24;
     wchar_t name[64]{};
-    if (GetKeyNameTextW(lParam, name, 64) == 0) return L"Tecla " + std::to_wstring(virtualKey);
-    return name;
+    if (GetKeyNameTextW(lParam, name, 64) == 0) return prefix + L"Tecla " + std::to_wstring(virtualKey);
+    return prefix + name;
 }
 
 SettingsWindow::SettingsWindow(HINSTANCE instance, HWND owner, Callbacks callbacks)
@@ -163,10 +170,17 @@ int SettingsWindow::selectedValueOf(HWND selector) const {
     return found->second.options[found->second.index].second;
 }
 
-void SettingsWindow::cycleSelector(HWND selector) {
+void SettingsWindow::openSelector(HWND selector) {
     Selector& state = selectors_[selector];
     if (state.options.empty()) return;
-    state.index = (state.index + 1) % static_cast<int>(state.options.size());
+    std::vector<std::wstring> labels;
+    labels.reserve(state.options.size());
+    for (const auto& option : state.options) labels.push_back(option.first);
+
+    RECT anchor{};
+    GetWindowRect(selector, &anchor);
+    const int chosen = showDropdown(hwnd_, anchor, labels, state.index, labelFont_);
+    if (chosen >= 0) state.index = chosen;
     InvalidateRect(selector, nullptr, FALSE);
 }
 
@@ -251,12 +265,14 @@ void SettingsWindow::buildControls(HWND parent) {
     micDeviceSelector_ = makeSelector(parent, inset(kAudioCard, 116, 170, 168, 26));
 
     // Card "Atalhos": um botão por ação. Clicar captura a próxima tecla pressionada.
-    makeLabel(parent, instance_, L"ATALHOS  ·  clique e pressione a tecla (Esc cancela)", inset(kHotkeysCard, kPad, 10, 500, 18));
-    const wchar_t* hotkeyLabels[] = {L"Gravar / parar", L"Ligar / desligar replay", L"Salvar clipe"};
-    for (int i = 0; i < 3; ++i) {
-        const int x = kPad + i * 200;
-        makeLabel(parent, instance_, hotkeyLabels[i], inset(kHotkeysCard, x, 32, 180, 18));
-        hotkeyButtons_[i] = makeOwnerButton(parent, instance_, L"", inset(kHotkeysCard, x, 50, 180, 26), kIdHotkeyBase + i);
+    makeLabel(parent, instance_, L"ATALHOS  ·  clique e pressione a tecla, com Ctrl/Alt/Shift se quiser (Esc cancela)",
+              inset(kHotkeysCard, kPad, 10, 560, 18));
+    const wchar_t* hotkeyLabels[kHotkeyCount] = {L"Gravar / parar", L"Ligar o replay", L"Salvar clipe", L"Painel no jogo"};
+    constexpr int kHotkeyWidth = 137;  // 4 colunas com 12 px entre elas
+    for (int i = 0; i < kHotkeyCount; ++i) {
+        const int x = kPad + i * (kHotkeyWidth + 12);
+        makeLabel(parent, instance_, hotkeyLabels[i], inset(kHotkeysCard, x, 32, kHotkeyWidth, 18));
+        hotkeyButtons_[i] = makeOwnerButton(parent, instance_, L"", inset(kHotkeysCard, x, 50, kHotkeyWidth, 26), kIdHotkeyBase + i);
     }
 
     // Inicialização com o Windows e botões de ação.
@@ -296,11 +312,12 @@ void SettingsWindow::loadValues(const Settings& settings) {
     updateVolumeLabel(gameVolume_, gameVolumeLabel_);
     updateVolumeLabel(micVolume_, micVolumeLabel_);
 
-    hotkeyVk_[0] = settings.hotkeyRecord;
-    hotkeyVk_[1] = settings.hotkeyReplay;
-    hotkeyVk_[2] = settings.hotkeySave;
+    hotkeys_[0] = settings.hotkeyRecord;
+    hotkeys_[1] = settings.hotkeyReplay;
+    hotkeys_[2] = settings.hotkeySave;
+    hotkeys_[3] = settings.hotkeyOverlay;
     capturing_ = -1;
-    for (int i = 0; i < 3; ++i) SetWindowTextW(hotkeyButtons_[i], keyName(hotkeyVk_[i]).c_str());
+    for (int i = 0; i < kHotkeyCount; ++i) SetWindowTextW(hotkeyButtons_[i], keyName(hotkeys_[i]).c_str());
 }
 
 void SettingsWindow::rebuildDeviceSelectors(const Settings& settings) {
@@ -371,23 +388,24 @@ Settings SettingsWindow::readValues() const {
     settings.startWithWindows = isChecked(startupCheck_);
     settings.gameVolume = static_cast<int>(SendMessageW(gameVolume_, TBM_GETPOS, 0, 0));
     settings.micVolume = static_cast<int>(SendMessageW(micVolume_, TBM_GETPOS, 0, 0));
-    settings.hotkeyRecord = hotkeyVk_[0];
-    settings.hotkeyReplay = hotkeyVk_[1];
-    settings.hotkeySave = hotkeyVk_[2];
+    settings.hotkeyRecord = hotkeys_[0];
+    settings.hotkeyReplay = hotkeys_[1];
+    settings.hotkeySave = hotkeys_[2];
+    settings.hotkeyOverlay = hotkeys_[3];
     return settings;
 }
 
 bool SettingsWindow::validateHotkeys() const {
-    for (int i = 0; i < 3; ++i) {
-        for (int j = i + 1; j < 3; ++j) {
-            if (hotkeyVk_[i] == hotkeyVk_[j]) return false;
+    for (int i = 0; i < kHotkeyCount; ++i) {
+        for (int j = i + 1; j < kHotkeyCount; ++j) {
+            if (hotkeys_[i] == hotkeys_[j]) return false;
         }
     }
     return true;
 }
 
 void SettingsWindow::beginKeyCapture(int index) {
-    if (capturing_ >= 0) endKeyCapture(true, hotkeyVk_[capturing_]);
+    if (capturing_ >= 0) endKeyCapture(true, hotkeys_[capturing_]);
     capturing_ = index;
     SetWindowTextW(hotkeyButtons_[index], L"Pressione uma tecla…");
     if (callbacks_.onCapturing) callbacks_.onCapturing(true);  // senão o atalho global consumiria a tecla
@@ -395,12 +413,12 @@ void SettingsWindow::beginKeyCapture(int index) {
     InvalidateRect(hotkeyButtons_[index], nullptr, FALSE);
 }
 
-void SettingsWindow::endKeyCapture(bool keepKey, UINT virtualKey) {
+void SettingsWindow::endKeyCapture(bool keepKey, unsigned hotkey) {
     if (capturing_ < 0) return;
     const int index = capturing_;
     capturing_ = -1;
-    if (keepKey) hotkeyVk_[index] = virtualKey;
-    SetWindowTextW(hotkeyButtons_[index], keyName(hotkeyVk_[index]).c_str());
+    if (keepKey) hotkeys_[index] = hotkey;
+    SetWindowTextW(hotkeyButtons_[index], keyName(hotkeys_[index]).c_str());
     InvalidateRect(hotkeyButtons_[index], nullptr, FALSE);
     if (callbacks_.onCapturing) callbacks_.onCapturing(false);
 }
@@ -555,10 +573,10 @@ LRESULT SettingsWindow::handleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         case WM_COMMAND:
             // Seletores não têm ID (0): o clique chega com o handle no lParam.
             if (HIWORD(wParam) == BN_CLICKED && LOWORD(wParam) == 0 && lParam && selectors_.count(reinterpret_cast<HWND>(lParam))) {
-                cycleSelector(reinterpret_cast<HWND>(lParam));
+                openSelector(reinterpret_cast<HWND>(lParam));
                 return 0;
             }
-            if (HIWORD(wParam) == BN_CLICKED && LOWORD(wParam) >= kIdHotkeyBase && LOWORD(wParam) < kIdHotkeyBase + 3) {
+            if (HIWORD(wParam) == BN_CLICKED && LOWORD(wParam) >= kIdHotkeyBase && LOWORD(wParam) < kIdHotkeyBase + kHotkeyCount) {
                 beginKeyCapture(static_cast<int>(LOWORD(wParam) - kIdHotkeyBase));
                 return 0;
             }
@@ -607,8 +625,21 @@ LRESULT SettingsWindow::handleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                 if (vk == VK_ESCAPE) {
                     endKeyCapture(false, 0);
                 } else if (!isModifierKey(vk)) {
-                    endKeyCapture(true, vk);
+                    // Modificadores pressionados junto com a tecla entram no atalho (ex.: Alt + X).
+                    unsigned mods = 0;
+                    if (GetKeyState(VK_CONTROL) < 0) mods |= MOD_CONTROL;
+                    if (GetKeyState(VK_MENU) < 0) mods |= MOD_ALT;
+                    if (GetKeyState(VK_SHIFT) < 0) mods |= MOD_SHIFT;
+                    swallowChar_ = msg == WM_SYSKEYDOWN;
+                    endKeyCapture(true, makeHotkey(vk, mods));
                 }
+                return 0;
+            }
+            break;
+
+        case WM_SYSCHAR:
+            if (swallowChar_) {
+                swallowChar_ = false;
                 return 0;
             }
             break;

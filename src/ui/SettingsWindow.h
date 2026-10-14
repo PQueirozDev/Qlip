@@ -25,11 +25,12 @@ public:
     // Mostra a janela com os valores atuais (cria na primeira vez).
     void open(const Settings& current);
 
-    static std::wstring keyName(UINT virtualKey);
+    // Nome legível de um atalho salvo (tecla + modificadores), ex.: "Alt + X".
+    static std::wstring keyName(unsigned hotkey);
 
 private:
     // Seletor próprio (substitui o combo nativo, que não aceita o tema escuro).
-    // Clicar mostra a próxima opção; a lista de opções fica no próprio seletor.
+    // Clicar abre a lista suspensa com todas as opções.
     struct Selector {
         std::vector<std::pair<std::wstring, int>> options;  // texto e valor
         int index = 0;
@@ -44,14 +45,14 @@ private:
     void addOption(HWND selector, const wchar_t* text, int value);
     void setSelected(HWND selector, int value);
     int selectedValueOf(HWND selector) const;
-    void cycleSelector(HWND selector);
+    void openSelector(HWND selector);
 
     void loadValues(const Settings& settings);
     void rebuildDeviceSelectors(const Settings& settings);
     Settings readValues() const;
     bool validateHotkeys() const;
     void beginKeyCapture(int index);
-    void endKeyCapture(bool keepKey, UINT virtualKey);
+    void endKeyCapture(bool keepKey, unsigned hotkey);
     void browseFolder(HWND edit);
     void updateVolumeLabel(HWND trackbar, HWND label) const;
     void toggleCheck(HWND checkbox);
@@ -80,10 +81,14 @@ private:
     // Estado dos checkboxes (botões desenhados pelo proprietário não guardam o check nativo de forma confiável).
     std::map<HWND, bool> checks_;
 
-    // Atalhos: índice 0 gravar, 1 replay, 2 salvar clipe. -1 = nenhum em captura.
-    HWND hotkeyButtons_[3] = {nullptr, nullptr, nullptr};
-    UINT hotkeyVk_[3] = {0, 0, 0};
+    // Atalhos (tecla + modificadores, como em Settings): 0 gravar, 1 replay, 2 salvar clipe, 3 overlay.
+    // capturing_ = -1: nenhum em captura.
+    static constexpr int kHotkeyCount = 4;
+    HWND hotkeyButtons_[kHotkeyCount] = {};
+    unsigned hotkeys_[kHotkeyCount] = {};
     int capturing_ = -1;
+    // Depois de capturar Alt + tecla, o WM_SYSCHAR seguinte é descartado (senão o Windows emite um bipe).
+    bool swallowChar_ = false;
 
     HWND recordingsEdit_ = nullptr;
     HWND clipsEdit_ = nullptr;

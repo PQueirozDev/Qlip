@@ -12,6 +12,7 @@
 #include "replay/ReplayManager.h"
 #include "ui/LibraryWindow.h"
 #include "ui/MainWindow.h"
+#include "ui/OverlayWindow.h"
 #include "ui/SettingsWindow.h"
 #include "ui/TrayIcon.h"
 
@@ -28,6 +29,7 @@ private:
     static constexpr int kHotkeyRecord = 1;
     static constexpr int kHotkeyReplay = 2;
     static constexpr int kHotkeySave = 3;
+    static constexpr int kHotkeyOverlay = 4;
 
     bool acquireSingleInstance();
     void requestExit();
@@ -63,4 +65,5 @@ private:
     std::unique_ptr<TrayIcon> trayIcon_;
     std::unique_ptr<SettingsWindow> settingsWindow_;
     std::unique_ptr<LibraryWindow> library_;
+    std::unique_ptr<OverlayWindow> overlay_;
 };

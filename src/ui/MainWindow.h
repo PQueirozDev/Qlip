@@ -30,7 +30,12 @@ public:
         std::function<void()> onTimer;
         // Evento vindo de outra thread (fim da finalização ou falha da gravação).
         std::function<void()> onRecordingEvent;
+        // Pedido de encerramento vindo de fora (instalador/desinstalador), via kExitMessageName.
+        std::function<void()> onExitRequested;
     };
+
+    // Mensagem registrada que o instalador envia para fechar o Qlip do jeito normal (finaliza a gravação).
+    static constexpr wchar_t kExitMessageName[] = L"Qlip.RequestExit";
 
     enum class RecordState { Idle, Recording, Finalizing, Replay };
 

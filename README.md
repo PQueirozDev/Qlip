@@ -4,7 +4,7 @@ Gravador de tela e de clipes instantâneos para Windows 10/11, nativo (C++20, Wi
 enquanto um jogo roda. Alternativa minimalista ao OBS e ao ShadowPlay. Open source (MIT).
 
 **Site:** https://qlipapp.vercel.app · **Download:** [última versão](https://github.com/PQueirozDev/Qlip/releases/latest)
-(zip portátil para Windows x64: extraia e abra o `Qlip.exe`).
+(`Qlip-Setup.exe`, instalador sem pedir administrador, ou `Qlip-win64.zip`, portátil: extraia e abra o `Qlip.exe`).
 
 ## Funcionalidades
 
@@ -16,8 +16,12 @@ enquanto um jogo roda. Alternativa minimalista ao OBS e ao ShadowPlay. Open sour
 - **Áudio**: som do sistema (WASAPI loopback) e microfone (padrão do Windows ou um escolhido), cada um com volume
   próprio, mixados em AAC e sincronizados com o vídeo pelo mesmo relógio (QPC). Se o dispositivo for desconectado
   ou o padrão do Windows mudar, a captura reconecta sozinha; o intervalo sem dispositivo vira silêncio.
+- **Painel no jogo** (Alt+P): abre por cima do jogo, como o Alt+Z do app da NVIDIA, com replay, salvar clipe,
+  gravar, biblioteca e configurações. Escurece só o monitor do jogo, devolve o foco ao fechar (Esc ou Alt+P) e não
+  aparece nas gravações nem nos clipes. Funciona com jogos em janela ou tela cheia sem borda.
 - **Biblioteca**: lista gravações e clipes (duração, tamanho, data); abrir, mostrar na pasta, excluir (para a lixeira).
-- **Configurações**: pastas, FPS e qualidade separados para gravação e clipe, atalhos personalizáveis,
+- **Configurações**: pastas, FPS e qualidade separados para gravação e clipe (escolhidos em listas suspensas),
+  atalhos personalizáveis com Ctrl/Alt/Shift,
   inicialização com o Windows. Salvas em `%APPDATA%\Qlip\settings.json`.
 - **Recuperação**: a gravação é escrita em MP4 fragmentado temporário; se o app cair, o arquivo é recuperado na
   próxima abertura (perde-se no máximo o último fragmento, ~1 s).
@@ -44,8 +48,10 @@ O primeiro comando baixa o FFmpeg (headers, libs e DLLs) para `third_party/ffmpe
 O executável fica em `build\Release\Qlip.exe`, com as DLLs do FFmpeg copiadas ao lado.
 O FFmpeg usado é a build **LGPL shared** em `third_party/ffmpeg` (ver `THIRD_PARTY.md`).
 
-**Versão portátil**: `dist\Qlip-portable` (exe + 5 DLLs do FFmpeg + licenças). As configurações continuam em
-`%APPDATA%\Qlip`.
+**Distribuição**: `pwsh scripts/build-release.ps1` gera `dist\Qlip-portable` (exe + 5 DLLs do FFmpeg + licenças),
+`dist\Qlip-win64.zip` e o instalador `dist\Qlip-Setup.exe` (requer Inno Setup 6; script em `installer\Qlip.iss`).
+O instalador põe o app em `%LOCALAPPDATA%\Programs\Qlip`; desinstalar mantém as configurações (`%APPDATA%\Qlip`)
+e os vídeos.
 
 ## Resultados medidos
 
@@ -88,7 +94,9 @@ Outros pontos medidos:
   de dispositivo.
 - Na biblioteca, com muitos arquivos, a barra de rolagem vertical usa o estilo clássico do Windows (cinza).
 - Configurações de versões anteriores (pasta `%APPDATA%\QClip`) são movidas para `%APPDATA%\Qlip` na primeira execução.
-- Sem instalador (só a versão portátil).
+- O painel no jogo não abre por cima de jogos em tela cheia **exclusiva**: o Windows minimiza o jogo ao trocar o
+  foco. Use tela cheia sem borda (padrão na maioria dos jogos atuais). Não foi testado com um jogo real.
+- O instalador e o executável não são assinados; o SmartScreen pode avisar na primeira execução.
 
 ## Licença
 

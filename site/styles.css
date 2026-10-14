@@ -227,6 +227,7 @@ h2 { margin: 0; font: 700 clamp(28px, 3.8vw, 44px)/1.08 var(--f-sans); letter-sp
 /* --- Por dentro ------------------------------------------------------------- */
 .shots { display: grid; grid-template-columns: 1fr 1.1fr; gap: clamp(16px, 2.5vw, 28px); align-items: start; }
 .shot { margin: 0; }
+.shot.wide { grid-column: 1 / -1; }
 .shot img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line-2); box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.9); }
 .shot figcaption { margin-top: 10px; font-size: 11.5px; color: var(--ink-mute); text-transform: uppercase; letter-spacing: 0.08em; }
 

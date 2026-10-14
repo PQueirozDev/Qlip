@@ -7,6 +7,7 @@ const LINKS = {
   releases: `https://github.com/${REPO}/releases`,
   // Toda release publica o zip portátil com este nome fixo, então o link "latest" sempre funciona.
   download: `https://github.com/${REPO}/releases/latest/download/Qlip-win64.zip`,
+  setup: `https://github.com/${REPO}/releases/latest/download/Qlip-Setup.exe`,
 };
 document.querySelectorAll("[data-link]").forEach((a) => {
   const href = LINKS[a.dataset.link];

@@ -29,14 +29,20 @@ struct Settings {
     std::wstring recordingsFolder; // vazio = Vídeos\Qlip
     std::wstring clipsFolder;      // vazio = Vídeos\Qlip\Clipes
 
-    // Atalhos (virtual-key codes)
+    // Atalhos: virtual-key code nos 8 bits baixos e modificadores (MOD_ALT/CONTROL/SHIFT) a partir do bit 16.
     unsigned hotkeySave = 0x77;    // F8
     unsigned hotkeyRecord = 0x78;  // F9
     unsigned hotkeyReplay = 0x79;  // F10
+    unsigned hotkeyOverlay = 0x50 | (0x0001u << 16);  // Alt + P (Alt + Z já é do overlay da NVIDIA)
 
     // Sistema
     bool startWithWindows = false;
 };
+
+// Partes de um atalho salvo em Settings.
+constexpr unsigned hotkeyVk(unsigned hotkey) { return hotkey & 0xFF; }
+constexpr unsigned hotkeyMods(unsigned hotkey) { return (hotkey >> 16) & 0x7; }
+constexpr unsigned makeHotkey(unsigned vk, unsigned mods) { return (vk & 0xFF) | ((mods & 0x7) << 16); }
 
 // Bitrate (kbps) de cada nível de qualidade. Único lugar com os valores.
 int qualityBitrateKbps(int qualityIndex);

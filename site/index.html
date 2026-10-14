@@ -51,7 +51,7 @@
         <span class="brk"></span>
         <div class="stage">
           <div class="text-col">
-            <p class="kicker"><span class="dot"></span> v<span data-version>0.1.0</span> · open source · Windows</p>
+            <p class="kicker"><span class="dot"></span> v<span data-version>0.2.0</span> · open source · Windows</p>
             <h1 class="word word-back">QLIP</h1>
           </div>
           <figure class="hero-app">
@@ -63,6 +63,7 @@
           <span><kbd>F9</kbd> grava</span>
           <span><kbd>F10</kbd> liga o replay</span>
           <span><kbd>F8</kbd> salva o clipe</span>
+          <span><kbd>Alt+P</kbd> painel no jogo</span>
         </div>
       </section>
 
@@ -152,11 +153,11 @@
           </article>
 
           <article class="cell">
-            <p class="ck"><span class="i">⌘</span> atalhos</p>
-            <h3>Teclas do seu jeito</h3>
-            <p class="cp">Troque qualquer atalho clicando e apertando a tecla. Se outro app já usa a combinação, o Qlip avisa em vez de falhar calado.</p>
+            <p class="ck"><span class="i">⌘</span> no jogo</p>
+            <h3>Painel por cima do jogo</h3>
+            <p class="cp">Alt+P abre o painel sobre a partida, como o Alt+Z da NVIDIA: replay, clipe, gravação e configurações sem sair do jogo. Ele não aparece nas gravações, e todo atalho pode ser trocado, com Ctrl, Alt ou Shift.</p>
             <div class="mock">
-              <div class="m-keys"><span><em>gravar</em><kbd>F9</kbd></span><span><em>replay</em><kbd>F10</kbd></span><span><em>clipe</em><kbd>F8</kbd></span></div>
+              <div class="m-keys"><span><em>painel</em><kbd>Alt+P</kbd></span><span><em>replay</em><kbd>F10</kbd></span><span><em>clipe</em><kbd>F8</kbd></span></div>
             </div>
           </article>
         </div>
@@ -170,6 +171,10 @@
           <p class="sub">Interface nativa do Windows, sem navegador embutido. As telas abaixo são o app de verdade.</p>
         </div>
         <div class="shots">
+          <figure class="shot wide">
+            <img src="assets/app-overlay.png" width="936" height="272" loading="lazy" alt="Painel do Qlip aberto por cima do jogo com Alt+P: blocos de Replay instantâneo (ligado), Salvar clipe, Gravar, Biblioteca e Configurações, cada um com o atalho." />
+            <figcaption class="mono">painel no jogo · alt+p</figcaption>
+          </figure>
           <figure class="shot">
             <img src="assets/app-settings.png" width="672" height="607" loading="lazy" alt="Configurações do Qlip: pastas, gravação (o que gravar, resolução, FPS, qualidade, monitor), clipe de replay, áudio com volumes e dispositivo, atalhos e iniciar com o Windows." />
             <figcaption class="mono">configurações</figcaption>
@@ -237,11 +242,12 @@ cmake --build build --config Release</pre>
       <section id="download" class="section dl-sec">
         <span class="brk"></span>
         <img class="dl-icon" src="assets/icon.png" width="112" height="112" alt="" />
-        <p class="eyebrow">download · v<span data-version>0.1.0</span></p>
+        <p class="eyebrow">download · v<span data-version>0.2.0</span></p>
         <h2 class="dl-title">Pronto pra gravar.</h2>
-        <p class="sub">Versão portátil para Windows 10 e 11 (x64). Extraia o zip e abra o <code>Qlip.exe</code>, sem instalação. Precisa de uma placa NVIDIA com NVENC.</p>
+        <p class="sub">Para Windows 10 e 11 (x64). O instalador não pede administrador e cria os atalhos; a versão portátil é só extrair o zip e abrir o <code>Qlip.exe</code>. Precisa de uma placa NVIDIA com NVENC.</p>
         <div class="dl-btns">
-          <a class="btn big" data-link="download" href="#">Baixar para Windows <span class="mono">.zip</span></a>
+          <a class="btn big" data-link="setup" href="#">Baixar instalador <span class="mono">.exe</span></a>
+          <a class="btn-ghost big" data-link="download" href="#">Versão portátil <span class="mono">.zip</span></a>
           <a class="btn-ghost big" data-link="releases" href="#" target="_blank" rel="noopener noreferrer">Todas as versões</a>
         </div>
         <p class="fine mono">sem conta · sem nuvem · sem telemetria · MIT</p>

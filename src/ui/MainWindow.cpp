@@ -213,6 +213,11 @@ LRESULT MainWindow::handleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         if (callbacks_.onTaskbarRecreated) callbacks_.onTaskbarRecreated();
         return 0;
     }
+    static const UINT exitRequest = RegisterWindowMessageW(kExitMessageName);
+    if (msg == exitRequest) {
+        if (callbacks_.onExitRequested) callbacks_.onExitRequested();
+        return 0;
+    }
 
     switch (msg) {
         case WM_ERASEBKGND: {

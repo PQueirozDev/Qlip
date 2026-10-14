@@ -11,13 +11,6 @@ namespace {
 constexpr wchar_t kSingleInstanceName[] = L"Local\\Qlip.SingleInstance";
 constexpr uint64_t kNoticeMs = 4000;
 
-std::wstring mmss(uint64_t totalSeconds) {
-    wchar_t buffer[32]{};
-    swprintf_s(buffer, L"%02llu:%02llu", static_cast<unsigned long long>(totalSeconds / 60),
-               static_cast<unsigned long long>(totalSeconds % 60));
-    return buffer;
-}
-
 std::wstring hhmmss(uint64_t totalSeconds) {
     wchar_t buffer[32]{};
     swprintf_s(buffer, L"%02llu:%02llu:%02llu", static_cast<unsigned long long>(totalSeconds / 3600),
@@ -41,6 +34,7 @@ Application::~Application() {
     }
     recording_.reset();
     replay_.reset();
+    overlay_.reset();
     library_.reset();
     settingsWindow_.reset();
     trayIcon_.reset();
@@ -139,9 +133,14 @@ int Application::run() {
         if (id == kHotkeyRecord) toggleRecording();
         if (id == kHotkeyReplay) toggleReplay();
         if (id == kHotkeySave) saveClip();
+        if (id == kHotkeyOverlay && overlay_) overlay_->toggle();
     };
     windowCallbacks.onTimer = [this] { updateStatus(); };
     windowCallbacks.onRecordingEvent = [this] { handleRecordingEvent(); };
+    windowCallbacks.onExitRequested = [this] {
+        QLOG_INFO(L"Encerramento pedido pelo instalador.");
+        requestExit();
+    };
     mainWindow_ = std::make_unique<MainWindow>(std::move(windowCallbacks));
     if (!mainWindow_->create(instance_)) return 1;
 
@@ -160,6 +159,19 @@ int Application::run() {
     library_ = std::make_unique<LibraryWindow>(instance_, mainWindow_->handle(), [this] {
         return LibraryWindow::Folders{settings_.recordingsFolder(), settings_.clipsFolder()};
     });
+
+    OverlayWindow::Callbacks overlayCallbacks;
+    overlayCallbacks.onToggleReplay = [this] { toggleReplay(); };
+    overlayCallbacks.onSaveClip = [this] { saveClip(); };
+    overlayCallbacks.onToggleRecording = [this] { toggleRecording(); };
+    overlayCallbacks.onOpenLibrary = [this] {
+        if (library_) library_->open();
+    };
+    overlayCallbacks.onOpenSettings = [this] {
+        if (settingsWindow_) settingsWindow_->open(settings_.settings());
+    };
+    overlayCallbacks.onRefresh = [this] { updateStatus(); };
+    overlay_ = std::make_unique<OverlayWindow>(instance_, std::move(overlayCallbacks));
 
     TrayIcon::Callbacks trayCallbacks;
     trayCallbacks.onShow = [this] { mainWindow_->show(); };
@@ -198,6 +210,7 @@ int Application::run() {
     UnregisterHotKey(mainWindow_->handle(), kHotkeyRecord);
     UnregisterHotKey(mainWindow_->handle(), kHotkeyReplay);
     UnregisterHotKey(mainWindow_->handle(), kHotkeySave);
+    UnregisterHotKey(mainWindow_->handle(), kHotkeyOverlay);
 
     QLOG_INFO(L"Qlip encerrando.");
     return exitCode;
@@ -207,27 +220,30 @@ void Application::registerHotkeys() {
     const Settings& s = settings_.settings();
     struct Binding {
         int id;
-        UINT key;
-        const wchar_t* label;
+        unsigned hotkey;
+        const wchar_t* action;
     };
     const Binding bindings[] = {
-        {kHotkeyRecord, s.hotkeyRecord, L"F9 (gravar)"},
-        {kHotkeyReplay, s.hotkeyReplay, L"F10 (replay)"},
-        {kHotkeySave, s.hotkeySave, L"F8 (salvar clipe)"},
+        {kHotkeyRecord, s.hotkeyRecord, L"gravar"},
+        {kHotkeyReplay, s.hotkeyReplay, L"replay"},
+        {kHotkeySave, s.hotkeySave, L"salvar clipe"},
+        {kHotkeyOverlay, s.hotkeyOverlay, L"painel no jogo"},
     };
 
+    // Solta todos antes: trocar teclas entre duas ações (ex.: F8 ↔ F9) falharia com a antiga ainda registrada.
+    unregisterHotkeys();
     for (const Binding& binding : bindings) {
-        UnregisterHotKey(mainWindow_->handle(), binding.id);
-        if (!RegisterHotKey(mainWindow_->handle(), binding.id, MOD_NOREPEAT, binding.key)) {
+        if (!RegisterHotKey(mainWindow_->handle(), binding.id, hotkeyMods(binding.hotkey) | MOD_NOREPEAT, hotkeyVk(binding.hotkey))) {
             // Outro app já usa a tecla: informa em vez de falhar em silêncio.
-            mainWindow_->setDetail(std::wstring(binding.label) + L" em uso por outro aplicativo");
-            QLOG_WARN(std::wstring(L"Não foi possível registrar o atalho ") + binding.label + L".");
+            const std::wstring label = SettingsWindow::keyName(binding.hotkey) + L" (" + binding.action + L")";
+            mainWindow_->setDetail(label + L" em uso por outro aplicativo");
+            QLOG_WARN(L"Não foi possível registrar o atalho " + label + L".");
         }
     }
 }
 
 void Application::unregisterHotkeys() {
-    for (int id : {kHotkeyRecord, kHotkeyReplay, kHotkeySave}) {
+    for (int id : {kHotkeyRecord, kHotkeyReplay, kHotkeySave, kHotkeyOverlay}) {
         UnregisterHotKey(mainWindow_->handle(), id);
     }
 }
@@ -370,21 +386,40 @@ void Application::updateStatus() {
         mainWindow_->setStatus(L"Finalizando");
         mainWindow_->setDetail(L"Salvando o arquivo…");
     } else if (replay) {
-        // Buffer: quanto do replay já está acumulado, de N segundos.
-        const auto buffered = static_cast<uint64_t>(replay_->bufferedSeconds());
+        // Sem contador: o replay guarda sempre os últimos N segundos; a tela só mostra quantos.
         mainWindow_->setState(MainWindow::RecordState::Replay);
         mainWindow_->setStatus(L"Replay ativo");
-        mainWindow_->setTimer(mmss(buffered) + L" / " + mmss(static_cast<uint64_t>(s.replaySeconds)));
-        mainWindow_->setDetail(notice.empty() ? L"F8 salva os últimos " + std::to_wstring(s.replaySeconds) + L" s" : notice);
+        mainWindow_->setTimer(L"Últimos " + std::to_wstring(s.replaySeconds) + L" s");
+        mainWindow_->setDetail(notice.empty() ? SettingsWindow::keyName(s.hotkeySave) + L" salva o clipe  ·  " +
+                                                    SettingsWindow::keyName(s.hotkeyOverlay) + L" abre o painel"
+                                              : notice);
     } else {
         mainWindow_->setState(MainWindow::RecordState::Idle);
         mainWindow_->setStatus(L"Parado");
         mainWindow_->setTimer(L"00:00:00");
-        mainWindow_->setDetail(notice.empty() ? L"F9 grava  ·  F10 liga o replay  ·  F8 salva clipe" : notice);
+        mainWindow_->setDetail(notice.empty() ? SettingsWindow::keyName(s.hotkeyRecord) + L" grava  ·  " +
+                                                    SettingsWindow::keyName(s.hotkeyReplay) + L" liga o replay  ·  " +
+                                                    SettingsWindow::keyName(s.hotkeyOverlay) + L" painel"
+                                              : notice);
     }
 
-    // O cronômetro roda enquanto há gravação, finalização ou replay (o buffer também precisa atualizar).
+    // O cronômetro roda enquanto há gravação ou finalização; no replay, só para o aviso temporário expirar.
     mainWindow_->setTicking(recording || finalizing || replay);
+
+    if (overlay_ && overlay_->isVisible()) {
+        OverlayWindow::Status status;
+        status.replayOn = replay;
+        status.replaySeconds = s.replaySeconds;
+        status.recording = recording;
+        status.finalizing = finalizing;
+        status.recordingSeconds = recording ? static_cast<unsigned long long>(recording_->elapsedSeconds()) : 0;
+        status.notice = notice;
+        status.keyReplay = SettingsWindow::keyName(s.hotkeyReplay);
+        status.keySave = SettingsWindow::keyName(s.hotkeySave);
+        status.keyRecord = SettingsWindow::keyName(s.hotkeyRecord);
+        status.keyOverlay = SettingsWindow::keyName(s.hotkeyOverlay);
+        overlay_->setStatus(status);
+    }
 }
 
 void Application::handleRecordingEvent() {
