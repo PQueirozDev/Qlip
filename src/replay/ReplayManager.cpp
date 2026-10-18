@@ -1,5 +1,6 @@
 #include "replay/ReplayManager.h"
 
+#include <chrono>
 #include <memory>
 
 #include <windows.h>
@@ -97,8 +98,16 @@ bool ReplayManager::saveClip(const std::filesystem::path& folder, std::wstring* 
     }
     saving_ = true;
     saver_ = std::thread([this, clip, file] {
+        // O áudio entra no buffer com a folga do mixer (300 ms) de atraso: espera ela passar e copia de novo,
+        // para o fim do clipe ter som. Se o replay foi desligado nesse meio-tempo, fica a primeira cópia.
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        auto fresh = std::make_shared<ReplayBuffer::Clip>();
+        // Cópia nova terminando antes da primeira = o replay foi religado (outra sessão, tempo recomeçou): não serve.
+        const bool useFresh = buffer_.snapshot(seconds_, *fresh) && !fresh->entries.empty() && !clip->entries.empty() &&
+                              fresh->entries.back().timeUs >= clip->entries.back().timeUs;
+        const ReplayBuffer::Clip& source = useFresh ? *fresh : *clip;
         std::string writeError;
-        const bool ok = clip::save(*clip, file, &writeError);
+        const bool ok = clip::save(source, file, &writeError);
         // Libera a flag antes de avisar: quando a UI receber o aviso, um novo clipe já pode ser pedido.
         saving_ = false;
         if (ok) {

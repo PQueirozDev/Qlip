@@ -5,11 +5,13 @@
 #include <windows.h>
 #include <shellapi.h>
 
-// Ícone na bandeja: duplo clique mostra a janela; botão direito abre o menu (Mostrar / Sair).
+// Ícone na bandeja: clique abre o painel; botão direito abre o menu (painel, configurações, biblioteca, sair).
 class TrayIcon {
 public:
     struct Callbacks {
-        std::function<void()> onShow;
+        std::function<void()> onShow;  // abre o painel (o mesmo do Alt+P)
+        std::function<void()> onSettings;
+        std::function<void()> onLibrary;
         std::function<void()> onExit;
     };
 

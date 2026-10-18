@@ -113,7 +113,8 @@ bool LibraryWindow::create() {
     RECT frame{0, 0, kClientWidth, kClientHeight};
     const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME;
     AdjustWindowRect(&frame, style, FALSE);
-    hwnd_ = CreateWindowExW(0, kWindowClass, L"Biblioteca do Qlip", style, CW_USEDEFAULT, CW_USEDEFAULT,
+    // WS_EX_APPWINDOW: a janela dona (principal) fica escondida; sem isso esta não apareceria na barra de tarefas.
+    hwnd_ = CreateWindowExW(WS_EX_APPWINDOW, kWindowClass, L"Biblioteca do Qlip", style, CW_USEDEFAULT, CW_USEDEFAULT,
                             frame.right - frame.left, frame.bottom - frame.top, owner_, nullptr, instance_, this);
     if (!hwnd_) {
         QLOG_ERROR(L"Falha ao criar a biblioteca.");

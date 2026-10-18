@@ -14,11 +14,15 @@ enquanto um jogo roda. Alternativa minimalista ao OBS e ao ShadowPlay. Open sour
 - **Replay instantâneo** (F10 liga/desliga, F8 salva): mantém os últimos 15/30/60/120 s em memória como pacotes
   já codificados (nunca frames brutos) e salva o clipe em MP4, começando em keyframe. Roda junto com a gravação.
 - **Áudio**: som do sistema (WASAPI loopback) e microfone (padrão do Windows ou um escolhido), cada um com volume
-  próprio, mixados em AAC e sincronizados com o vídeo pelo mesmo relógio (QPC). Se o dispositivo for desconectado
+  próprio, mixados em AAC e sincronizados com o vídeo pelo mesmo relógio (QPC). Cada fonte é gravada como um fluxo
+  contínuo; o relógio só corrige a deriva do dispositivo (1 amostra por vez). Se o dispositivo for desconectado
   ou o padrão do Windows mudar, a captura reconecta sozinha; o intervalo sem dispositivo vira silêncio.
-- **Painel no jogo** (Alt+P): abre por cima do jogo, como o Alt+Z do app da NVIDIA, com replay, salvar clipe,
-  gravar, biblioteca e configurações. Escurece só o monitor do jogo, devolve o foco ao fechar (Esc ou Alt+P) e não
-  aparece nas gravações nem nos clipes. Funciona com jogos em janela ou tela cheia sem borda.
+- **Painel no jogo** (Alt+P): a interface do Qlip. O app não tem janela: fica na bandeja, e o painel abre por
+  cima do jogo, como o Alt+Z do app da NVIDIA, com replay, salvar clipe, gravar, biblioteca e configurações.
+  Escurece só o monitor do jogo, devolve o foco ao fechar (Esc ou Alt+P) e não aparece nas gravações nem nos clipes.
+  Abrir o Qlip pelo atalho ou clicar no ícone da bandeja também abre o painel; iniciando com o Windows, ele abre em
+  silêncio. Avisos rápidos ("Clipe salvo", "Replay ligado") aparecem no canto da tela, também fora das gravações.
+  Funciona com jogos em janela ou tela cheia sem borda.
 - **Biblioteca**: lista gravações e clipes (duração, tamanho, data); abrir, mostrar na pasta, excluir (para a lixeira).
 - **Configurações**: pastas, FPS e qualidade separados para gravação e clipe (escolhidos em listas suspensas),
   atalhos personalizáveis com Ctrl/Alt/Shift,

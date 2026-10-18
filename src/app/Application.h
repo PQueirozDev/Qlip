@@ -13,6 +13,7 @@
 #include "ui/LibraryWindow.h"
 #include "ui/MainWindow.h"
 #include "ui/OverlayWindow.h"
+#include "ui/ToastWindow.h"
 #include "ui/SettingsWindow.h"
 #include "ui/TrayIcon.h"
 
@@ -60,10 +61,13 @@ private:
     // Aviso temporário na barra de status (ex.: "Clipe salvo"), até noticeUntil_.
     std::wstring notice_;
     uint64_t noticeUntil_ = 0;
+    uint64_t noticeSeq_ = 0;  // muda a cada aviso novo
+    uint64_t toastSeq_ = 0;   // último aviso já mostrado no canto da tela (só a thread da UI usa)
 
     std::unique_ptr<MainWindow> mainWindow_;
     std::unique_ptr<TrayIcon> trayIcon_;
     std::unique_ptr<SettingsWindow> settingsWindow_;
     std::unique_ptr<LibraryWindow> library_;
     std::unique_ptr<OverlayWindow> overlay_;
+    std::unique_ptr<ToastWindow> toast_;
 };

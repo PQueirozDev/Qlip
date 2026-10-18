@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(Qlip VERSION 0.2.0 LANGUAGES CXX)
+project(Qlip VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,6 +61,8 @@ add_executable(Qlip WIN32
     src/ui/Dropdown.h
     src/ui/OverlayWindow.cpp
     src/ui/OverlayWindow.h
+    src/ui/ToastWindow.cpp
+    src/ui/ToastWindow.h
     src/ui/Theme.cpp
     src/ui/Theme.h
     src/ui/TrayIcon.cpp
@@ -83,7 +85,7 @@ target_link_libraries(Qlip PRIVATE
     nlohmann_json::nlohmann_json
     avcodec avformat avutil swscale
     d3d11 dxgi windowsapp winmm
-    shell32 user32 gdi32 gdiplus ole32 comctl32 uxtheme dwmapi shcore
+    shell32 user32 gdi32 gdiplus ole32 comctl32 uxtheme dwmapi shcore avrt
 )
 
 if(MSVC)

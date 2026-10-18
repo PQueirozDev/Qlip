@@ -132,6 +132,12 @@ void OverlayWindow::show() {
     // O painel abre no monitor do jogo (janela em primeiro plano) ou, sem ela, no do cursor.
     HWND foreground = GetForegroundWindow();
     previousForeground_ = (foreground && foreground != panel_ && foreground != backdrop_) ? foreground : nullptr;
+    // Aberto pela bandeja: a barra de tarefas estava na frente; não há jogo para devolver o foco.
+    wchar_t className[64]{};
+    if (previousForeground_ && GetClassNameW(previousForeground_, className, 64) &&
+        (wcscmp(className, L"Shell_TrayWnd") == 0 || wcscmp(className, L"Shell_SecondaryTrayWnd") == 0)) {
+        previousForeground_ = nullptr;
+    }
     HMONITOR monitor = nullptr;
     if (previousForeground_) {
         monitor = MonitorFromWindow(previousForeground_, MONITOR_DEFAULTTOPRIMARY);

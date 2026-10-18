@@ -218,6 +218,11 @@ LRESULT MainWindow::handleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         if (callbacks_.onExitRequested) callbacks_.onExitRequested();
         return 0;
     }
+    static const UINT showPanelRequest = RegisterWindowMessageW(kShowPanelMessageName);
+    if (msg == showPanelRequest) {
+        if (callbacks_.onShowPanelRequested) callbacks_.onShowPanelRequested();
+        return 0;
+    }
 
     switch (msg) {
         case WM_ERASEBKGND: {

@@ -42,7 +42,8 @@ constexpr uint64_t kStartMinFreeBytes = 1024ull * 1024 * 1024;  // 1 GB para ini
 constexpr uint64_t kStopMinFreeBytes = 256ull * 1024 * 1024;    // 256 MB durante a gravação
 constexpr int kDiskCheckEveryPackets = 300;
 constexpr int kAudioBitrateKbps = 192;
-constexpr int64_t kAudioMarginFrames = AudioEncoder::kSampleRate / 10;  // 100 ms de folga antes de misturar
+// Folga antes de misturar: o que uma fonte entregar com até 300 ms de atraso (jogo pesado, driver USB) ainda entra.
+constexpr int64_t kAudioMarginFrames = AudioEncoder::kSampleRate * 3 / 10;
 
 int64_t qpcNow() {
     LARGE_INTEGER t{};

@@ -121,6 +121,25 @@ bool ReplayBuffer::snapshot(int seconds, Clip& clip) const {
         }
         clip.entries.push_back(copy);
     }
+
+    // O áudio chega com a folga do mixer de atraso: sem cortar, o fim do clipe teria vídeo sem som.
+    // Termina o clipe no último pacote de áudio (se houver áudio no buffer).
+    int64_t lastAudio = -1;
+    for (const Entry& e : clip.entries) {
+        if (!e.video) lastAudio = std::max(lastAudio, e.timeUs);
+    }
+    // Só corta se o som cobre o início do clipe; senão sobraria um clipe sem vídeo.
+    if (lastAudio >= 0 && !clip.entries.empty() && lastAudio >= clip.entries.front().timeUs) {
+        // O último pacote de áudio cobre 1024 amostras (~21 ms) a partir do seu início.
+        const int64_t audioEnd = lastAudio + 1024 * 1000000 / kAudioSampleRate;
+        // O vídeo chega antes do áudio, então os quadros depois do fim do som ficam espalhados no fim da lista.
+        auto beyond = std::remove_if(clip.entries.begin(), clip.entries.end(), [audioEnd](Entry& e) {
+            if (!e.video || e.timeUs <= audioEnd) return false;
+            av_packet_free(&e.packet);
+            return true;
+        });
+        clip.entries.erase(beyond, clip.entries.end());
+    }
     clip.video = cloneParams(videoParams_);
     clip.audio = cloneParams(audioParams_);
     return clip.video != nullptr;

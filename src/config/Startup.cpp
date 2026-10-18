@@ -16,7 +16,8 @@ std::wstring executableCommand() {
     const DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
     if (length == 0 || length >= path.size()) return {};
     path.resize(length);
-    return L"\"" + path + L"\"";
+    // --background: ao ligar o PC, o Qlip abre em silêncio (sem mostrar o painel).
+    return L"\"" + path + L"\" " + std::wstring(startup::kBackgroundArg);
 }
 
 }  // namespace

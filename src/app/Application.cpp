@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include "config/Startup.h"
+#include "ui/Theme.h"
 #include "utils/Logger.h"
 #include "utils/Text.h"
 
@@ -35,6 +36,7 @@ Application::~Application() {
     recording_.reset();
     replay_.reset();
     overlay_.reset();
+    toast_.reset();
     library_.reset();
     settingsWindow_.reset();
     trayIcon_.reset();
@@ -46,10 +48,12 @@ Application::~Application() {
 bool Application::acquireSingleInstance() {
     singleInstanceMutex_ = CreateMutexW(nullptr, FALSE, kSingleInstanceName);
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        // Já existe uma instância: mostra a existente em vez de abrir outra.
+        // Já existe uma instância: abrir o Qlip de novo (atalho, menu Iniciar) mostra o painel dela.
         if (HWND existing = FindWindowW(L"QlipMainWindow", nullptr)) {
-            ShowWindow(existing, SW_SHOW);
-            SetForegroundWindow(existing);
+            DWORD processId = 0;
+            GetWindowThreadProcessId(existing, &processId);
+            AllowSetForegroundWindow(processId);  // esta instância tem o foco; repassa para a outra abrir o painel
+            PostMessageW(existing, RegisterWindowMessageW(MainWindow::kShowPanelMessageName), 0, 0);
         }
         return false;
     }
@@ -137,6 +141,9 @@ int Application::run() {
     };
     windowCallbacks.onTimer = [this] { updateStatus(); };
     windowCallbacks.onRecordingEvent = [this] { handleRecordingEvent(); };
+    windowCallbacks.onShowPanelRequested = [this] {
+        if (overlay_) overlay_->show();
+    };
     windowCallbacks.onExitRequested = [this] {
         QLOG_INFO(L"Encerramento pedido pelo instalador.");
         requestExit();
@@ -173,17 +180,32 @@ int Application::run() {
     overlayCallbacks.onRefresh = [this] { updateStatus(); };
     overlay_ = std::make_unique<OverlayWindow>(instance_, std::move(overlayCallbacks));
 
+    toast_ = std::make_unique<ToastWindow>(instance_);
+
     TrayIcon::Callbacks trayCallbacks;
-    trayCallbacks.onShow = [this] { mainWindow_->show(); };
+    trayCallbacks.onShow = [this] { overlay_->show(); };
+    trayCallbacks.onSettings = [this] { settingsWindow_->open(settings_.settings()); };
+    trayCallbacks.onLibrary = [this] { library_->open(); };
     trayCallbacks.onExit = [this] { requestExit(); };
     trayIcon_ = std::make_unique<TrayIcon>(std::move(trayCallbacks));
     if (!trayIcon_->create(mainWindow_->handle())) {
-        QLOG_WARN(L"Bandeja indisponível; a janela continua aberta.");
+        QLOG_WARN(L"Bandeja indisponível; o painel continua no atalho.");
     }
 
-    mainWindow_->show();
-    updateStatus();
-    registerHotkeys();  // por último: o aviso de atalho indisponível não pode ser sobrescrito
+    // A entrada de inicialização é refeita a cada abertura: acompanha a pasta do exe e o --background.
+    if (settings_.settings().startWithWindows) startup::setEnabled(true);
+
+    // Sem janela principal: a interface é o painel (Alt+P). Aberto pelo usuário, o Qlip já mostra o painel;
+    // na inicialização com o Windows, só um aviso no canto.
+    registerHotkeys();
+    const bool background = std::wstring_view(GetCommandLineW()).find(startup::kBackgroundArg) != std::wstring_view::npos;
+    if (background) {
+        setNotice(L"Qlip pronto  ·  " + SettingsWindow::keyName(settings_.settings().hotkeyOverlay) + L" abre o painel");
+        updateStatus();
+    } else {
+        updateStatus();
+        overlay_->show();
+    }
 
     MSG msg{};
     int exitCode = 0;
@@ -236,7 +258,7 @@ void Application::registerHotkeys() {
         if (!RegisterHotKey(mainWindow_->handle(), binding.id, hotkeyMods(binding.hotkey) | MOD_NOREPEAT, hotkeyVk(binding.hotkey))) {
             // Outro app já usa a tecla: informa em vez de falhar em silêncio.
             const std::wstring label = SettingsWindow::keyName(binding.hotkey) + L" (" + binding.action + L")";
-            mainWindow_->setDetail(label + L" em uso por outro aplicativo");
+            setNotice(label + L" em uso por outro aplicativo");
             QLOG_WARN(L"Não foi possível registrar o atalho " + label + L".");
         }
     }
@@ -301,12 +323,14 @@ void Application::startRecording() {
     }
 
     mainWindow_->setRecording(true);
+    setNotice(L"Gravando  ·  " + SettingsWindow::keyName(s.hotkeyRecord) + L" para parar");
     updateStatus();
 }
 
 void Application::stopRecording() {
     recording_->stop();
     mainWindow_->setRecording(false);
+    setNotice(L"Finalizando a gravação…");
     updateStatus();
 }
 
@@ -353,15 +377,18 @@ void Application::saveClip() {
 void Application::setNotice(const std::wstring& text) {
     std::lock_guard lock(eventMutex_);
     notice_ = text;
+    ++noticeSeq_;
     noticeUntil_ = GetTickCount64() + kNoticeMs;
 }
 
 void Application::updateStatus() {
     const Settings& s = settings_.settings();
     std::wstring notice;
+    uint64_t noticeSeq = 0;
     {
         std::lock_guard lock(eventMutex_);
         if (GetTickCount64() < noticeUntil_) notice = notice_;
+        noticeSeq = noticeSeq_;
     }
 
     const bool recording = recording_->isRecording();
@@ -405,6 +432,16 @@ void Application::updateStatus() {
 
     // O cronômetro roda enquanto há gravação ou finalização; no replay, só para o aviso temporário expirar.
     mainWindow_->setTicking(recording || finalizing || replay);
+
+    // Aviso novo com o painel fechado: mostra no canto da tela (não há janela principal).
+    if (noticeSeq != toastSeq_ && !notice.empty()) {
+        toastSeq_ = noticeSeq;
+        if (toast_ && !(overlay_ && overlay_->isVisible())) {
+            const bool bad = notice.rfind(L"Erro", 0) == 0 || notice.find(L"em uso") != std::wstring::npos ||
+                             notice.rfind(L"Ligue", 0) == 0 || notice.rfind(L"Aguarde", 0) == 0;
+            toast_->show(notice, bad ? theme::kWarning : (recording ? theme::kRecording : theme::kAccent));
+        }
+    }
 
     if (overlay_ && overlay_->isVisible()) {
         OverlayWindow::Status status;

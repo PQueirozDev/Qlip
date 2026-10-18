@@ -32,7 +32,15 @@ public:
     bool start(int64_t startTicks, int64_t frequency, std::wstring* error);
     void stop();
 
+    // Quantas vezes a posição foi realinhada ao relógio por um salto grande (diagnóstico no log).
+    uint64_t resyncs() const { return resyncs_; }
+
 private:
+    // Diferença entre o horário do pacote e a posição contínua que ainda é tratada como oscilação (20 ms).
+    static constexpr int64_t kResyncFrames = kSampleRate / 50;
+    // Deriva a partir da qual a posição é corrigida em 1 amostra por pacote (2 ms; a oscilação medida fica abaixo de 1 ms).
+    static constexpr int64_t kDriftFrames = kSampleRate / 500;
+
     Kind kind_;
     AudioRing& ring_;
     std::wstring deviceId_;
@@ -40,4 +48,5 @@ private:
     HANDLE wakeEvent_ = nullptr;
     std::atomic<bool> running_{false};
     std::atomic<bool> reconnect_{false};  // pedido de reabrir o fluxo (padrão do Windows mudou)
+    std::atomic<uint64_t> resyncs_{0};
 };

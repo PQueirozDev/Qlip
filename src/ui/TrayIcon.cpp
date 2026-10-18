@@ -11,6 +11,8 @@ namespace {
 constexpr UINT kIconId = 1;
 constexpr UINT kMenuShow = 1;
 constexpr UINT kMenuExit = 2;
+constexpr UINT kMenuSettings = 3;
+constexpr UINT kMenuLibrary = 4;
 
 }  // namespace
 
@@ -67,7 +69,10 @@ void TrayIcon::showMenu(HWND owner) const {
     HMENU menu = CreatePopupMenu();
     if (!menu) return;
 
-    AppendMenuW(menu, MF_STRING, kMenuShow, L"Mostrar Qlip");
+    AppendMenuW(menu, MF_STRING, kMenuShow, L"Abrir painel");
+    AppendMenuW(menu, MF_STRING, kMenuLibrary, L"Biblioteca");
+    AppendMenuW(menu, MF_STRING, kMenuSettings, L"Configurações");
+    SetMenuDefaultItem(menu, kMenuShow, FALSE);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kMenuExit, L"Sair");
 
@@ -81,5 +86,7 @@ void TrayIcon::showMenu(HWND owner) const {
     DestroyMenu(menu);
 
     if (chosen == kMenuShow && callbacks_.onShow) callbacks_.onShow();
+    if (chosen == kMenuLibrary && callbacks_.onLibrary) callbacks_.onLibrary();
+    if (chosen == kMenuSettings && callbacks_.onSettings) callbacks_.onSettings();
     if (chosen == kMenuExit && callbacks_.onExit) callbacks_.onExit();
 }

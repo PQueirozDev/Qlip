@@ -56,10 +56,10 @@ Name: "{autodesktop}\Qlip"; Filename: "{app}\Qlip.exe"; Tasks: desktopicon
 
 [Registry]
 ; Mesmo valor que o próprio app grava ao marcar "Iniciar com o Windows".
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Qlip"; ValueData: """{app}\Qlip.exe"""; Tasks: startup
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Qlip"; ValueData: """{app}\Qlip.exe"" --background"; Tasks: startup
 
 [Run]
-Filename: "{app}\Qlip.exe"; Description: "Abrir o Qlip agora"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Qlip.exe"; Description: "Abrir o Qlip agora (Alt+P abre o painel)"; Flags: nowait postinstall skipifsilent
 
 [Code]
 // Fecha o Qlip que está aberto do jeito normal (como "Sair" na bandeja): a gravação em andamento é finalizada.

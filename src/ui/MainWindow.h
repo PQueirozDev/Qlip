@@ -32,7 +32,11 @@ public:
         std::function<void()> onRecordingEvent;
         // Pedido de encerramento vindo de fora (instalador/desinstalador), via kExitMessageName.
         std::function<void()> onExitRequested;
+        // Outra instância foi aberta (atalho do Qlip): mostrar o painel, via kShowPanelMessageName.
+        std::function<void()> onShowPanelRequested;
     };
+
+    static constexpr wchar_t kShowPanelMessageName[] = L"Qlip.ShowPanel";
 
     // Mensagem registrada que o instalador envia para fechar o Qlip do jeito normal (finaliza a gravação).
     static constexpr wchar_t kExitMessageName[] = L"Qlip.RequestExit";
