@@ -3,7 +3,7 @@
 Gravador de tela e de clipes instantâneos para Windows 10/11, nativo (C++20, Win32), focado em ficar leve
 enquanto um jogo roda. Alternativa minimalista ao OBS e ao ShadowPlay. Open source (MIT).
 
-**Site:** https://qlipapp.vercel.app · **Download:** [última versão](https://github.com/PQueirozDev/Qlip/releases/latest)
+**Site:** https://qlipapp.pqueirozdev.com.br · **Download:** [última versão](https://github.com/PQueirozDev/Qlip/releases/latest)
 (`Qlip-Setup.exe`, instalador sem pedir administrador, ou `Qlip-win64.zip`, portátil: extraia e abra o `Qlip.exe`).
 
 ## Funcionalidades
