@@ -1,10 +1,15 @@
 # Gera a versão de distribuição: build Release, pasta portátil, zip e instalador.
 # Uso (PowerShell 7, na raiz do repositório): pwsh scripts/build-release.ps1
-# Requer: CMake, Visual Studio 2022 (C++), FFmpeg em third_party/ffmpeg (scripts/fetch-ffmpeg.ps1)
+# Requer: CMake, Visual Studio 2022 (C++), FFmpeg mínimo em third_party/ffmpeg (bash scripts/build-ffmpeg.sh)
 # e Inno Setup 6 (para o instalador).
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+
+# A distribuição usa o FFmpeg mínimo (3 DLLs, ~3 MB). O completo (fetch-ffmpeg.ps1) funciona, mas pesa ~120 MB.
+if (Test-Path third_party\ffmpeg\bin\avfilter-*.dll) {
+    throw "third_party\ffmpeg tem o FFmpeg completo. Gere o mínimo com: bash scripts/build-ffmpeg.sh"
+}
 
 $version = (Select-String -Path CMakeLists.txt -Pattern 'project\(Qlip VERSION ([0-9.]+)').Matches[0].Groups[1].Value
 Write-Host "Qlip $version"
@@ -18,9 +23,9 @@ if ($LASTEXITCODE -ne 0) { throw "Falha no build." }
 $portable = Join-Path $root "dist\Qlip-portable"
 if (Test-Path $portable) { Remove-Item -Recurse -Force $portable }
 New-Item -ItemType Directory -Force $portable | Out-Null
-# Só as bibliotecas que o Qlip carrega (avdevice/avfilter não são usadas).
+# Só as bibliotecas que o Qlip carrega.
 Copy-Item build\Release\Qlip.exe $portable -Force
-foreach ($pattern in "avcodec-*.dll", "avformat-*.dll", "avutil-*.dll", "swresample-*.dll", "swscale-*.dll") {
+foreach ($pattern in "avcodec-*.dll", "avformat-*.dll", "avutil-*.dll") {
     Copy-Item "build\Release\$pattern" $portable -Force
 }
 Copy-Item README.md, THIRD_PARTY.md $portable -Force

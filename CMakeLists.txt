@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(Qlip VERSION 0.3.0 LANGUAGES CXX)
+project(Qlip VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -43,6 +43,9 @@ add_executable(Qlip WIN32
     src/encoder/AudioEncoder.h
     src/encoder/VideoEncoder.cpp
     src/encoder/VideoEncoder.h
+    src/recording/CapturePipeline.cpp
+    src/recording/CapturePipeline.h
+    src/recording/PacketSink.h
     src/recording/RecordingManager.cpp
     src/recording/RecordingManager.h
     src/recording/VideoMuxer.cpp
@@ -73,7 +76,7 @@ add_executable(Qlip WIN32
     src/utils/Text.h
 )
 
-# FFmpeg LGPL shared (sem x264/x265): headers, import libs e DLLs em third_party/ffmpeg.
+# FFmpeg LGPL shared mínimo (scripts/build-ffmpeg.sh): headers, import libs e DLLs em third_party/ffmpeg.
 set(QCLIP_FFMPEG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg)
 target_include_directories(Qlip PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # SYSTEM: avisos dos headers do FFmpeg não entram no nosso build.
@@ -83,7 +86,7 @@ target_link_directories(Qlip PRIVATE ${QCLIP_FFMPEG_DIR}/lib)
 target_compile_definitions(Qlip PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_link_libraries(Qlip PRIVATE
     nlohmann_json::nlohmann_json
-    avcodec avformat avutil swscale
+    avcodec avformat avutil
     d3d11 dxgi windowsapp winmm
     shell32 user32 gdi32 gdiplus ole32 comctl32 uxtheme dwmapi shcore avrt
 )

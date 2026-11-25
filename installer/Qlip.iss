@@ -50,6 +50,11 @@ Source: "{#SourceDir}\LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\THIRD_PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\FFMPEG-LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 
+[InstallDelete]
+; DLLs do FFmpeg que as versões até a 0.3.0 instalavam e que não são mais usadas.
+Type: files; Name: "{app}\swresample-*.dll"
+Type: files; Name: "{app}\swscale-*.dll"
+
 [Icons]
 Name: "{autoprograms}\Qlip"; Filename: "{app}\Qlip.exe"; Comment: "Gravador de tela e replay instantâneo"
 Name: "{autodesktop}\Qlip"; Filename: "{app}\Qlip.exe"; Tasks: desktopicon

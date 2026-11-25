@@ -4,10 +4,13 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <windows.h>
 
 #include "config/SettingsManager.h"
+#include "recording/CapturePipeline.h"
 #include "recording/RecordingManager.h"
 #include "replay/ReplayManager.h"
 #include "ui/LibraryWindow.h"
@@ -46,7 +49,15 @@ private:
     void registerHotkeys();
     void unregisterHotkeys();
     void applySettings(const Settings& settings);
-    RecordingManager::Options captureOptions() const;
+    CapturePipeline::Options captureOptions() const;
+    CapturePipeline::Callbacks pipelineCallbacks();
+    // Pipeline para um novo uso: compartilha `other` se a saída for a mesma, senão inicia um novo.
+    std::shared_ptr<CapturePipeline> acquirePipeline(const CapturePipeline::Options& options,
+                                                     const std::shared_ptr<CapturePipeline>& other, std::wstring* error);
+    // Solta o pipeline de um uso; para se `other` não o usa.
+    void releasePipeline(std::shared_ptr<CapturePipeline>& pipeline, const std::shared_ptr<CapturePipeline>& other);
+    void reapPipelines();
+    void shutdownCapture();
 
     HINSTANCE instance_;
     HANDLE singleInstanceMutex_ = nullptr;
@@ -55,9 +66,14 @@ private:
     // Gravação e replay usam threads próprias, que chamam a UI via PostMessage.
     std::unique_ptr<RecordingManager> recording_;
     std::unique_ptr<ReplayManager> replay_;
+    // Pipeline de cada uso (o mesmo objeto quando compartilhado). Só a thread da UI mexe.
+    std::shared_ptr<CapturePipeline> recordPipeline_;
+    std::shared_ptr<CapturePipeline> replayPipeline_;
+    // Pipelines parados ainda finalizando: destruídos quando ficam ociosos, sem bloquear a UI.
+    std::vector<std::shared_ptr<CapturePipeline>> retiredPipelines_;
     std::mutex eventMutex_;
     std::wstring pendingFatal_;
-    std::wstring pendingReplayFatal_;
+    std::vector<std::pair<CapturePipeline*, std::wstring>> pendingPipelineFatal_;
     // Aviso temporário na barra de status (ex.: "Clipe salvo"), até noticeUntil_.
     std::wstring notice_;
     uint64_t noticeUntil_ = 0;

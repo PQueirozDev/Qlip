@@ -25,14 +25,7 @@ Application::Application(HINSTANCE instance) : instance_(instance) {}
 
 Application::~Application() {
     // Gravação e replay devem estar encerrados antes de a janela sumir (os eventos usam a janela).
-    if (recording_) {
-        recording_->stop();
-        recording_->waitForIdle();
-    }
-    if (replay_) {
-        replay_->stop();
-        replay_->waitForIdle();
-    }
+    shutdownCapture();
     recording_.reset();
     replay_.reset();
     overlay_.reset();
@@ -103,13 +96,6 @@ int Application::run() {
     };
     replayCallbacks.onClipError = [this](const std::wstring& error) {
         setNotice(L"Erro ao salvar clipe: " + error);
-        if (mainWindow_) mainWindow_->postRecordingEvent();
-    };
-    replayCallbacks.onFatal = [this](const std::wstring& reason) {
-        {
-            std::lock_guard lock(eventMutex_);
-            pendingReplayFatal_ = reason;
-        }
         if (mainWindow_) mainWindow_->postRecordingEvent();
     };
     replay_ = std::make_unique<ReplayManager>(std::move(replayCallbacks));
@@ -225,10 +211,7 @@ int Application::run() {
     }
 
     // Encerramento limpo: para gravação e replay, espera a finalização e libera os atalhos.
-    if (recording_ && recording_->isRecording()) recording_->stop();
-    if (replay_ && replay_->isActive()) replay_->stop();
-    if (recording_) recording_->waitForIdle();
-    if (replay_) replay_->waitForIdle();
+    shutdownCapture();
     UnregisterHotKey(mainWindow_->handle(), kHotkeyRecord);
     UnregisterHotKey(mainWindow_->handle(), kHotkeyReplay);
     UnregisterHotKey(mainWindow_->handle(), kHotkeySave);
@@ -283,10 +266,9 @@ void Application::applySettings(const Settings& settings) {
     updateStatus();
 }
 
-RecordingManager::Options Application::captureOptions() const {
+CapturePipeline::Options Application::captureOptions() const {
     const Settings& s = settings_.settings();
-    RecordingManager::Options options;
-    options.folder = settings_.recordingsFolder();
+    CapturePipeline::Options options;
     options.captureWindow = s.captureWindow;
     options.monitorDevice = s.monitorDevice;
     options.micDeviceId = s.micDeviceId;
@@ -306,16 +288,88 @@ void Application::toggleRecording() {
     }
 }
 
+CapturePipeline::Callbacks Application::pipelineCallbacks() {
+    CapturePipeline::Callbacks callbacks;
+    callbacks.onFatal = [this](CapturePipeline* pipeline, const std::wstring& reason) {
+        {
+            std::lock_guard lock(eventMutex_);
+            pendingPipelineFatal_.emplace_back(pipeline, reason);
+        }
+        if (mainWindow_) mainWindow_->postRecordingEvent();
+    };
+    // Finalização terminou: a thread da UI recolhe o pipeline (destruí-lo agora não bloqueia).
+    callbacks.onIdle = [this](CapturePipeline*) {
+        if (mainWindow_) mainWindow_->postRecordingEvent();
+    };
+    return callbacks;
+}
+
+std::shared_ptr<CapturePipeline> Application::acquirePipeline(const CapturePipeline::Options& options,
+                                                              const std::shared_ptr<CapturePipeline>& other,
+                                                              std::wstring* error) {
+    reapPipelines();
+    // Mesmo vídeo, áudio e alvo do pipeline já ativo: compartilha (uma sessão de captura e de NVENC só).
+    // No modo "só o jogo", só se o jogo em primeiro plano ainda for a janela que ele captura.
+    if (other && other->isRunning() && other->options().sameOutput(options) &&
+        (!options.captureWindow || other->targetWindow() == CapturePipeline::findTargetWindow(options.excludeWindow))) {
+        QLOG_INFO(L"Usando o pipeline de captura já ativo (gravação e replay compartilhados).");
+        return other;
+    }
+    auto pipeline = std::make_shared<CapturePipeline>(pipelineCallbacks());
+    if (!pipeline->start(options, error)) return nullptr;
+    return pipeline;
+}
+
+void Application::releasePipeline(std::shared_ptr<CapturePipeline>& pipeline, const std::shared_ptr<CapturePipeline>& other) {
+    if (!pipeline) return;
+    // Ainda usado pelo outro (gravação ou replay): continua rodando. Senão para, e a finalização
+    // (até ~0,3 s, a folga do áudio) roda fora da UI; o objeto é recolhido quando ficar ocioso.
+    if (pipeline != other) {
+        pipeline->stop();
+        retiredPipelines_.push_back(pipeline);
+    }
+    pipeline.reset();
+    reapPipelines();
+}
+
+void Application::reapPipelines() {
+    std::erase_if(retiredPipelines_, [](const std::shared_ptr<CapturePipeline>& p) { return p->isIdle(); });
+}
+
+void Application::shutdownCapture() {
+    if (recording_ && recording_->isRecording()) recording_->stop();
+    if (replay_) replay_->stop();
+    for (auto* pipeline : {&recordPipeline_, &replayPipeline_}) {
+        if (!*pipeline) continue;
+        (*pipeline)->stop();
+        retiredPipelines_.push_back(*pipeline);
+        pipeline->reset();
+    }
+    for (auto& pipeline : retiredPipelines_) {
+        pipeline->stop();
+        pipeline->waitForIdle();
+    }
+    retiredPipelines_.clear();
+    // Os pipelines já avisaram os destinos: falta só o remux da gravação e um clipe em andamento.
+    if (recording_) recording_->waitForIdle();
+    if (replay_) replay_->waitForIdle();
+}
+
 void Application::startRecording() {
     const Settings& s = settings_.settings();
 
-    RecordingManager::Options options = captureOptions();
+    CapturePipeline::Options options = captureOptions();
     options.fps = s.recordFps;
     options.height = s.resolutionHeight;
     options.bitrateKbps = qualityBitrateKbps(s.recordQuality);
 
+    // Um pipeline de uma gravação que terminou sozinha (o evento ainda não chegou) é solto antes.
+    releasePipeline(recordPipeline_, replayPipeline_);
     std::wstring error;
-    if (!recording_->start(options, &error)) {
+    auto pipeline = acquirePipeline(options, replay_->isActive() ? replayPipeline_ : nullptr, &error);
+    if (pipeline && recording_->start(pipeline, settings_.recordingsFolder(), &error)) recordPipeline_ = pipeline;
+    if (!recordPipeline_) {
+        if (pipeline) releasePipeline(pipeline, replayPipeline_);
         MessageBoxW(mainWindow_->handle(), error.c_str(), L"Qlip", MB_OK | MB_ICONWARNING);
         mainWindow_->setStatus(L"Erro");
         mainWindow_->setDetail(L"Não foi possível iniciar a gravação");
@@ -329,6 +383,7 @@ void Application::startRecording() {
 
 void Application::stopRecording() {
     recording_->stop();
+    releasePipeline(recordPipeline_, replayPipeline_);
     mainWindow_->setRecording(false);
     setNotice(L"Finalizando a gravação…");
     updateStatus();
@@ -337,6 +392,7 @@ void Application::stopRecording() {
 void Application::toggleReplay() {
     if (replay_->isActive()) {
         replay_->stop();
+        releasePipeline(replayPipeline_, recordPipeline_);
         setNotice(L"Replay desligado");
         updateStatus();
         return;
@@ -344,13 +400,19 @@ void Application::toggleReplay() {
 
     // Replay usa as configurações de clipe: FPS e qualidade próprios; a duração é a do replay.
     const Settings& s = settings_.settings();
-    RecordingManager::Options options = captureOptions();
+    CapturePipeline::Options options = captureOptions();
     options.fps = s.clipFps;
     options.height = s.resolutionHeight;
     options.bitrateKbps = qualityBitrateKbps(s.clipQuality);
 
+    // Um replay que parou sozinho (o evento ainda não chegou) solta o pipeline antes.
+    replay_->stop();
+    releasePipeline(replayPipeline_, recordPipeline_);
     std::wstring error;
-    if (!replay_->start(options, s.replaySeconds, &error)) {
+    auto pipeline = acquirePipeline(options, recording_->isRecording() ? recordPipeline_ : nullptr, &error);
+    if (pipeline && replay_->start(pipeline, s.replaySeconds, &error)) replayPipeline_ = pipeline;
+    if (!replayPipeline_) {
+        if (pipeline) releasePipeline(pipeline, recordPipeline_);
         MessageBoxW(mainWindow_->handle(), error.c_str(), L"Qlip", MB_OK | MB_ICONWARNING);
         return;
     }
@@ -461,23 +523,34 @@ void Application::updateStatus() {
 
 void Application::handleRecordingEvent() {
     std::wstring fatal;
-    std::wstring replayFatal;
+    std::vector<std::pair<CapturePipeline*, std::wstring>> pipelineFatal;
     {
         std::lock_guard lock(eventMutex_);
         fatal.swap(pendingFatal_);
-        replayFatal.swap(pendingReplayFatal_);
+        pipelineFatal.swap(pendingPipelineFatal_);
     }
 
     if (!fatal.empty()) {
-        // A gravação parou sozinha: encerra com o que já foi gravado e avisa o usuário.
-        if (recording_->isRecording()) stopRecording();
+        // A gravação parou sozinha (disco): encerra com o que já foi gravado e avisa. O replay, se houver, segue.
+        if (recordPipeline_) stopRecording();
         MessageBoxW(mainWindow_->handle(), (fatal + L"\n\nO que já foi gravado foi salvo.").c_str(), L"Qlip", MB_OK | MB_ICONWARNING);
     }
 
-    if (!replayFatal.empty()) {
-        if (replay_->isActive()) replay_->stop();
-        MessageBoxW(mainWindow_->handle(), (L"O replay foi desligado: " + replayFatal).c_str(), L"Qlip", MB_OK | MB_ICONWARNING);
+    for (const auto& [pipeline, reason] : pipelineFatal) {
+        // A captura parou sozinha (tela ou janela sumiu, falha do NVENC): encerra quem a usava.
+        std::wstring message;
+        if (pipeline && recordPipeline_.get() == pipeline) {
+            stopRecording();
+            message = reason + L"\n\nO que já foi gravado foi salvo.";
+        }
+        if (pipeline && replayPipeline_.get() == pipeline) {
+            replay_->stop();
+            releasePipeline(replayPipeline_, recordPipeline_);
+            message += (message.empty() ? L"" : L"\n\n") + std::wstring(L"O replay foi desligado: ") + reason;
+        }
+        if (!message.empty()) MessageBoxW(mainWindow_->handle(), message.c_str(), L"Qlip", MB_OK | MB_ICONWARNING);
     }
+    reapPipelines();
 
     if (!recording_->isRecording() && !recording_->isFinalizing()) {
         mainWindow_->setRecording(false);

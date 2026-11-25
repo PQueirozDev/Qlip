@@ -10,137 +10,88 @@
 #include <string>
 #include <thread>
 
-#include <windows.h>
-
-#include "audio/AudioRing.h"
-#include "audio/AudioSource.h"
-#include "capture/ScreenCapture.h"
-#include "encoder/AudioEncoder.h"
-#include "encoder/VideoEncoder.h"
+#include "recording/CapturePipeline.h"
+#include "recording/PacketSink.h"
 #include "recording/VideoMuxer.h"
-#include "replay/ReplayBuffer.h"
-#include "utils/BoundedQueue.h"
 
-struct AVPacket;
-
-// Orquestra a gravação contínua:
-//   vídeo:  captura (WGC, monitor ou janela) -> encoder NVENC (CFR) ------\
-//   áudio:  WASAPI (jogo e/ou mic) -> mixer -> AAC ----------------------> writer -> MKV -> MP4
-// Ao parar, a finalização roda em outra thread, para que a interface não trave.
-class RecordingManager {
+// Gravação contínua: um destino de arquivo ligado a um CapturePipeline (próprio ou compartilhado com o replay).
+// Começa no primeiro IDR depois do start (pedido ao encoder na hora) e termina no instante do stop, com os tempos
+// reescritos para começar em zero. Escreve MP4 fragmentado temporário e, ao final, faz o remux para MP4 normal
+// em outra thread, para que nem a interface nem o pipeline travem.
+class RecordingManager : public PacketSink {
 public:
-    struct Options {
-        int fps = 60;
-        int height = 1080;          // 0 = resolução original do alvo
-        int bitrateKbps = 12000;
-        std::filesystem::path folder;
-        bool captureWindow = false; // false = monitor; true = janela (jogo) em primeiro plano
-        std::wstring monitorDevice; // monitor a gravar (vazio = principal)
-        std::wstring micDeviceId;   // microfone (vazio = padrão do Windows)
-        HWND excludeWindow = nullptr;  // a própria janela do Qlip nunca é escolhida como alvo
-        bool recordGameAudio = false;
-        bool recordMicAudio = false;
-        int gameVolume = 100;       // %
-        int micVolume = 100;        // %
-        // Se definido, o pipeline não grava arquivo: os pacotes vão para o buffer de replay.
-        ReplayBuffer* replayBuffer = nullptr;
-    };
-
     struct Callbacks {
         // Chamado na thread de finalização quando o arquivo final está pronto (ou falhou).
         std::function<void()> onFinished;
-        // Chamado quando a gravação precisa parar sozinha (alvo sumiu, disco cheio, falha de codificação).
-        // Pode vir de qualquer thread: quem recebe deve sinalizar a UI e chamar stop() de lá.
+        // Chamado quando a gravação precisa parar sozinha (disco cheio, falha de escrita).
+        // Vem da thread de escrita do pipeline: quem recebe deve sinalizar a UI e chamar stop() de lá.
         std::function<void(const std::wstring& reason)> onFatal;
     };
 
     explicit RecordingManager(Callbacks callbacks);
-    ~RecordingManager();
+    ~RecordingManager() override;
 
-    bool start(const Options& options, std::wstring* error);
-    // Não bloqueia: encerra a captura e agenda a finalização.
+    // pipeline: já iniciado. O arquivo vai para folder.
+    bool start(const std::shared_ptr<CapturePipeline>& pipeline, const std::filesystem::path& folder, std::wstring* error);
+    // Não bloqueia: marca o fim da gravação no instante atual; a finalização roda em outra thread.
     void stop();
-    // Espera a finalização terminar (usado ao encerrar o app).
+    // Espera a finalização terminar (usado ao encerrar o app). O pipeline precisa estar rodando ou já ter parado.
     void waitForIdle();
 
-    bool isRecording() const { return recording_; }
-    bool isFinalizing() const { return finalizing_; }
-    bool hasAudio() const { return audioActive_; }
+    bool isRecording() const;
+    bool isFinalizing() const;
+    bool hasAudio() const { return hasAudio_; }
     double elapsedSeconds() const;
-    uint64_t droppedFrames() const { return dropped_; }
+    uint64_t droppedFrames() const;
+    // Pipeline em uso enquanto grava (nullptr depois do stop). Só a thread da UI usa.
+    CapturePipeline* pipeline() const { return pipeline_.get(); }
     std::filesystem::path lastFile() const;
     std::wstring lastError() const;
     // Avisos da última gravação que não impediram o início (ex.: microfone indisponível).
     std::wstring lastWarning() const;
 
-    // Converte arquivos .recording.mkv que sobraram de uma queda em .mp4.
+    // Converte arquivos temporários que sobraram de uma queda em .mp4.
     static void recoverLeftovers(const std::filesystem::path& folder);
 
-private:
-    struct Frame {
-        int slot = -1;
-        uint32_t width = 0;
-        uint32_t height = 0;
-        int64_t qpcTicks = 0;
-    };
+    // PacketSink (thread de escrita do pipeline).
+    void onPacket(const AVPacket* packet) override;
+    bool finished() const override { return done_; }
+    void onEnd() override;
 
-    void onCaptureFrame(const ScreenCapture::Frame& frame);
-    void onCaptureFatal(const std::wstring& reason);
-    void encoderLoop();
-    void audioLoop();
-    void writerLoop();
+private:
+    void write(const AVPacket* packet, int64_t offset);
+    void failWrite(const std::wstring& reason);
     void finalize();
-    void finishProducer();
-    void mixBlock(int64_t startFrame, float* mix, float* scratch) const;
     void setError(const std::wstring& message);
-    void setWarning(const std::wstring& message);
-    void fail(const std::wstring& reason);
     bool hasEnoughDiskSpace(const std::filesystem::path& folder, uint64_t minBytes) const;
-    void cleanupAfterFailedStart();
 
     Callbacks callbacks_;
-    ScreenCapture capture_;
-    VideoEncoder encoder_;
-    AudioEncoder audioEncoder_;
     VideoMuxer muxer_;
+    std::shared_ptr<CapturePipeline> pipeline_;
 
-    AudioRing gameRing_;
-    AudioRing micRing_;
-    std::unique_ptr<AudioSource> gameSource_;
-    std::unique_ptr<AudioSource> micSource_;
-    float gameGain_ = 1.0f;
-    float micGain_ = 1.0f;
-    std::atomic<bool> audioActive_{false};
-    std::thread audioThread_;
-    std::mutex wakeMutex_;
-    std::condition_variable wake_;
-
-    std::unique_ptr<BoundedQueue<Frame>> frames_;
-    std::unique_ptr<BoundedQueue<AVPacket*>> packets_;
-
-    std::thread encoderThread_;
-    std::thread writerThread_;
-    std::thread finalizer_;
-
-    // Quantos produtores ainda escrevem em packets_ (vídeo e, se houver, áudio). O último fecha a fila.
-    std::atomic<int> producersLeft_{0};
-
-    std::atomic<bool> recording_{false};
-    std::atomic<bool> finalizing_{false};
-    // Instante (em amostras de áudio) em que stop() foi chamado; -1 enquanto a gravação está ativa.
-    std::atomic<int64_t> stopFrame_{-1};
+    // Fim da gravação, no tempo do pipeline (µs): fica no máximo enquanto grava.
+    std::atomic<int64_t> endUs_{INT64_MAX};
+    // Estado da escrita: só a thread de escrita do pipeline usa.
+    bool started_ = false;
+    bool videoDone_ = false;
+    bool audioDone_ = false;
+    int64_t baseVideoUs_ = 0;
+    int64_t baseAudioSamples_ = 0;
+    int64_t written_ = 0;
+    std::atomic<bool> done_{false};
     std::atomic<bool> writeFailed_{false};
-    std::atomic<uint64_t> dropped_{0};
-
+    bool hasAudio_ = false;
     int64_t startTicks_ = 0;
-    int64_t frequency_ = 1;
-    int64_t frameIntervalTicks_ = 1;  // 1/FPS em ticks do QPC (saída CFR)
-    bool timerResolutionRaised_ = false;
+
+    // Transições de estado (start, stop, onEnd, fim da finalização) sob stateMutex_.
+    mutable std::mutex stateMutex_;
+    std::condition_variable idle_;
+    bool recording_ = false;
+    bool finalizing_ = false;
+    bool ended_ = false;
+    std::thread finalizer_;
     std::filesystem::path tempFile_;
     std::filesystem::path finalFile_;
-    ReplayBuffer* replay_ = nullptr;  // modo replay: pacotes vão para o buffer em vez do arquivo
-
-    mutable std::mutex stateMutex_;
     std::filesystem::path lastFile_;
     std::wstring lastError_;
     std::wstring lastWarning_;

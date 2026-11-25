@@ -5,8 +5,9 @@ out/
 .vs/
 *.user
 
-# FFmpeg (baixado por scripts/fetch-ffmpeg.ps1; não vai para o repositório)
+# FFmpeg (gerado por scripts/build-ffmpeg.sh; não vai para o repositório)
 third_party/ffmpeg/
+third_party/ffmpeg-build/
 
 # Site (Vercel)
 site/.vercel/

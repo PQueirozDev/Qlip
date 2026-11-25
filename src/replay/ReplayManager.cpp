@@ -5,6 +5,10 @@
 
 #include <windows.h>
 
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
+
 #include "utils/Logger.h"
 #include "utils/Text.h"
 
@@ -28,48 +32,49 @@ ReplayManager::~ReplayManager() {
     waitForIdle();
 }
 
-bool ReplayManager::start(const RecordingManager::Options& options, int seconds, std::wstring* error) {
+bool ReplayManager::start(const std::shared_ptr<CapturePipeline>& pipeline, int seconds, std::wstring* error) {
     if (isActive()) {
         if (error) *error = L"O replay já está ativo.";
         return false;
     }
-    waitForIdle();
+    if (!pipeline || !pipeline->isRunning()) {
+        if (error) *error = L"A captura não está ativa.";
+        return false;
+    }
+    stop();  // solta um pipeline antigo que tenha parado sozinho
 
     seconds_ = seconds;
     buffer_.clear();
     buffer_.setDurationSeconds(seconds);
+    buffer_.setCodecs(pipeline->videoCodec(), pipeline->audioCodec());
 
-    RecordingManager::Options pipeline = options;
-    pipeline.replayBuffer = &buffer_;
-
-    RecordingManager::Callbacks recordingCallbacks;
-    recordingCallbacks.onFatal = [this](const std::wstring& reason) {
-        if (callbacks_.onFatal) callbacks_.onFatal(reason);
-    };
-    recorder_ = std::make_unique<RecordingManager>(std::move(recordingCallbacks));
-    if (!recorder_->start(pipeline, error)) {
-        recorder_.reset();
-        buffer_.clear();
-        return false;
-    }
+    pipeline_ = pipeline;
+    active_ = true;
+    pipeline->addSink(this);
     QLOG_INFO(L"Replay ativo: últimos " + std::to_wstring(seconds) + L" s.");
     return true;
 }
 
 void ReplayManager::stop() {
-    if (recorder_) recorder_->stop();
+    // Depois de removeSink nada mais entra no buffer; o pipeline segue se a gravação o usa.
+    if (pipeline_) pipeline_->removeSink(this);
+    active_ = false;
+    pipeline_.reset();
+    buffer_.clear();
 }
 
 void ReplayManager::waitForIdle() {
-    if (recorder_) recorder_->waitForIdle();
-    // Só limpa depois do pipeline inteiro: o writer ainda pode estar empurrando pacotes até aqui.
-    buffer_.clear();
     std::lock_guard lock(saverMutex_);
     if (saver_.joinable()) saver_.join();
 }
 
 bool ReplayManager::isActive() const {
-    return recorder_ && recorder_->isRecording();
+    return active_;
+}
+
+void ReplayManager::onPacket(const AVPacket* packet) {
+    // Clone por referência: os dados do pacote não são copiados.
+    if (AVPacket* copy = av_packet_clone(packet)) buffer_.push(copy);
 }
 
 bool ReplayManager::saveClip(const std::filesystem::path& folder, std::wstring* error) {

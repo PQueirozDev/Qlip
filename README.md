@@ -12,7 +12,8 @@ enquanto um jogo roda. Alternativa minimalista ao OBS e ao ShadowPlay. Open sour
   (janela em primeiro plano).
   H.264 por NVENC, saída com FPS constante (30/60/120), resolução original, 1080p ou 720p, 4 níveis de qualidade.
 - **Replay instantâneo** (F10 liga/desliga, F8 salva): mantém os últimos 15/30/60/120 s em memória como pacotes
-  já codificados (nunca frames brutos) e salva o clipe em MP4, começando em keyframe. Roda junto com a gravação.
+  já codificados (nunca frames brutos) e salva o clipe em MP4, começando em keyframe. Roda junto com a gravação;
+  com as mesmas configurações de vídeo e áudio, os dois usam uma única captura e uma única sessão do NVENC.
 - **Áudio**: som do sistema (WASAPI loopback) e microfone (padrão do Windows ou um escolhido), cada um com volume
   próprio, mixados em AAC e sincronizados com o vídeo pelo mesmo relógio (QPC). Cada fonte é gravada como um fluxo
   contínuo; o relógio só corrige a deriva do dispositivo (1 amostra por vez). Se o dispositivo for desconectado
@@ -39,25 +40,55 @@ Gravações vão para `Vídeos\Qlip`; clipes, para `Vídeos\Qlip\Clipes`. Log em
 
 ## Compilar
 
-Requer Visual Studio 2022 Build Tools (C++ desktop), CMake 3.24+ e PowerShell 7.
+Requer Visual Studio 2022 Build Tools (C++ desktop), CMake 3.24+ e PowerShell 7. Para compilar o FFmpeg mínimo:
+Git Bash, MinGW-w64 (ex.: `winget install BrechtSanders.WinLibs.POSIX.UCRT`, que já traz `nasm` e `mingw32-make`).
 
 ```
-pwsh scripts/fetch-ffmpeg.ps1
+bash scripts/build-ffmpeg.sh
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
 
-O primeiro comando baixa o FFmpeg (headers, libs e DLLs) para `third_party/ffmpeg`, que não fica no repositório.
+O primeiro comando baixa o código do FFmpeg e compila uma build **LGPL shared mínima** em `third_party/ffmpeg`
+(que não fica no repositório): só o encoder `h264_nvenc` (com entrada D3D11), o AAC, o muxer MP4 e os demuxers
+MP4/Matroska. São 3 DLLs com ~3 MB no total, contra ~120 MB da build completa. Leva alguns minutos.
+Alternativa sem MinGW: `pwsh scripts/fetch-ffmpeg.ps1` baixa a build completa pronta (funciona igual, só pesa mais;
+o script de distribuição recusa essa build).
 
-O executável fica em `build\Release\Qlip.exe`, com as DLLs do FFmpeg copiadas ao lado.
-O FFmpeg usado é a build **LGPL shared** em `third_party/ffmpeg` (ver `THIRD_PARTY.md`).
+O executável fica em `build\Release\Qlip.exe`, com as DLLs do FFmpeg copiadas ao lado (ver `THIRD_PARTY.md`).
 
-**Distribuição**: `pwsh scripts/build-release.ps1` gera `dist\Qlip-portable` (exe + 5 DLLs do FFmpeg + licenças),
+**Distribuição**: `pwsh scripts/build-release.ps1` gera `dist\Qlip-portable` (exe + 3 DLLs do FFmpeg + licenças),
 `dist\Qlip-win64.zip` e o instalador `dist\Qlip-Setup.exe` (requer Inno Setup 6; script em `installer\Qlip.iss`).
 O instalador põe o app em `%LOCALAPPDATA%\Programs\Qlip`; desinstalar mantém as configurações (`%APPDATA%\Qlip`)
 e os vídeos.
 
 ## Resultados medidos
+
+### Pipeline na GPU e sessão compartilhada (versão atual, comparada com a 0.3.0)
+
+Mesma máquina (abaixo), configurações de uso real: 1080p, 120 fps, qualidade alta (25 Mbps), áudio do sistema,
+replay de 15 s. Movimento na tela: `testsrc2` numa janela de 1280×720 (não em tela cheia). Medidas curtas (10 s)
+com o mesmo roteiro nas duas versões. CPU é do processo do Qlip, normalizada para todas as threads.
+**Não foi medido com jogo real nem o uso do NVENC.**
+
+| Situação | 0.3.0 | Atual |
+|---|---|---|
+| Ao abrir (memória privada) | 18,9 MB | 4,0 MB |
+| Replay ligado | 445,6 MB · CPU 4,67% | 237,1 MB · CPU 0,55% |
+| Replay + gravação | 829,1 MB · CPU 8,59% | 260,0 MB · CPU 0,60% |
+| Depois de desligar tudo | 210,2 MB | 12,4 MB |
+| DLLs do FFmpeg | 5, 120 MB | 3, 3,2 MB |
+
+- A CPU caiu porque a imagem não passa mais pela RAM: antes cada frame era copiado da GPU para a CPU, convertido
+  de BGRA para NV12 com `swscale` e enviado de volta ao NVENC. Agora a conversão e a escala rodam no processador de
+  vídeo do D3D11, e o NVENC lê a textura direto.
+- Replay + gravação com as mesmas configurações usam um pipeline só (uma captura, uma sessão NVENC). Com
+  configurações diferentes, continuam sendo dois.
+- Arquivos do teste: 3 gravações (13 s, 13 s e 5 s, uma delas encerrada pelo pedido de saída do app com gravação e
+  replay ativos) e 2 clipes de 15 s, todos com 0 erros de decodificação, 0 frames perdidos, começando em keyframe e
+  com o áudio do tamanho do vídeo.
+
+### Medições da 0.3.0
 
 Máquina: Windows 11, i7-10700F (16 threads), RTX 2060 6 GB (driver 610.88), SSD NVMe. Build Release x64.
 Carga de captura: padrão de teste em movimento (`testsrc2`, 1920×1080 a 60 fps, tela cheia) — **não foi medido
@@ -90,7 +121,8 @@ Outros pontos medidos:
 
 - O primeiro ~0,2–0,5 s de cada gravação mostra o primeiro frame parado: é o tempo que o Windows Graphics Capture
   leva para entregar a primeira imagem. A sincronia com o áudio não é afetada.
-- Gravação e replay ligados juntos abrem duas sessões NVENC (~2× a memória).
+- Gravação e replay só compartilham a sessão NVENC quando FPS, qualidade, resolução, alvo e áudio são iguais nas
+  configurações; com valores diferentes, são duas sessões (~2× a memória).
 - Captura de conteúdo protegido (DRM) não é possível e não é contornada.
 - O áudio do sistema sempre vem do dispositivo de reprodução padrão (o microfone pode ser escolhido).
 - "Só o jogo" grava a janela em primeiro plano no momento do F9; não há lista para escolher.

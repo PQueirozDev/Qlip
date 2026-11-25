@@ -16,8 +16,8 @@
 #include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
 
 // Captura via Windows Graphics Capture: um monitor (área de trabalho) ou uma janela (jogo).
-// Os frames são copiados na GPU para um anel de texturas de staging; o consumidor lê um slot por vez.
-// Não há cópia para RAM dentro da captura: a leitura só acontece quando o encoder pede.
+// Os frames são copiados na GPU para um anel de texturas (BGRA); o encoder converte e codifica direto dessas
+// texturas. A imagem nunca passa pela RAM: não há leitura da GPU para a CPU em nenhum ponto.
 class ScreenCapture {
 public:
     struct Frame {
@@ -28,7 +28,7 @@ public:
     };
 
     struct Callbacks {
-        // Chamado na thread de captura. O receptor DEVE chamar consumeSlot(), viewSlot()+releaseSlot() ou releaseSlot().
+        // Chamado na thread de captura. O receptor DEVE chamar releaseSlot() quando não precisar mais do slot.
         std::function<void(const Frame&)> onFrame;
         // Chamado quando o alvo some (monitor desconectado ou janela fechada).
         // Roda dentro da callback de captura, com o lock interno segurado: NÃO chamar stop() daqui.
@@ -42,12 +42,13 @@ public:
     bool start(HMONITOR monitor, HWND window, int maxFps, int slotCount, Callbacks callbacks, std::wstring* error);
     void stop();
 
-    // Lê o slot, chama fn(data, rowPitch) e libera o slot.
-    void consumeSlot(int slot, const std::function<void(const uint8_t* data, int rowPitch)>& fn);
-    // Lê o slot sem liberá-lo (o frame continua reservado, ex.: para repetir no CFR).
-    bool viewSlot(int slot, const std::function<void(const uint8_t* data, int rowPitch)>& fn);
-    // Libera um slot sem ler.
+    // Chama fn com a textura do slot, com o contexto D3D travado (fn pode enfileirar trabalho de GPU nele).
+    // O slot continua reservado (ex.: para repetir o frame no CFR) até releaseSlot().
+    bool useSlot(int slot, const std::function<bool(ID3D11Texture2D* texture)>& fn);
     void releaseSlot(int slot);
+
+    // Dispositivo D3D11 da captura: o encoder usa o mesmo, para ler as texturas sem cópia entre GPUs/dispositivos.
+    ID3D11Device* device() const { return device_.Get(); }
 
     // Tamanho atual do alvo (muda se o monitor ou a janela mudar de tamanho).
     uint32_t width() const { return width_; }
@@ -61,7 +62,7 @@ private:
 
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context_;
-    std::vector<Microsoft::WRL::ComPtr<ID3D11Texture2D>> staging_;
+    std::vector<Microsoft::WRL::ComPtr<ID3D11Texture2D>> slots_;
     std::vector<uint32_t> slotWidth_;
     std::vector<uint32_t> slotHeight_;
 
@@ -80,7 +81,7 @@ private:
     int64_t lastAcceptedTicks_ = 0;
     bool running_ = false;
 
-    // Serializa o uso do contexto D3D (CopyResource na captura, Map/Unmap no consumidor).
+    // Serializa o uso do contexto D3D (cópia na captura, conversão de cor no encoder).
     std::mutex d3dMutex_;
     // Protege a lista de slots livres.
     std::mutex slotMutex_;

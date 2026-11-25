@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include <d3d10.h>
+
 #include <windows.graphics.capture.interop.h>
 #include <windows.graphics.directx.direct3d11.interop.h>
 #include <winrt/Windows.Foundation.h>
@@ -57,11 +59,14 @@ bool ScreenCapture::startInternal(HMONITOR monitor, HWND window, int maxFps, int
         return fail(L"Captura de tela (Windows Graphics Capture) não é suportada neste Windows.");
     }
 
-    // Dispositivo D3D11 com suporte a BGRA, necessário para a interoperabilidade com WinRT.
-    UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    // Dispositivo D3D11 com BGRA (interoperabilidade com WinRT) e vídeo (conversão BGRA -> NV12 na GPU).
+    UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
     HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, nullptr, 0,
                                    D3D11_SDK_VERSION, &device_, nullptr, &context_);
     if (FAILED(hr)) return fail(L"GPU indisponível para captura (D3D11CreateDevice falhou).");
+    // O contexto é usado pela captura, pelo encoder e pelo NVENC (via FFmpeg): o próprio D3D também serializa.
+    ComPtr<ID3D10Multithread> multithread;
+    if (SUCCEEDED(context_.As(&multithread))) multithread->SetMultithreadProtected(TRUE);
 
     ComPtr<IDXGIDevice> dxgiDevice;
     device_.As(&dxgiDevice);
@@ -86,8 +91,8 @@ bool ScreenCapture::startInternal(HMONITOR monitor, HWND window, int maxFps, int
     width_ = static_cast<uint32_t>(size.Width);
     height_ = static_cast<uint32_t>(size.Height);
 
-    // Anel de texturas de staging: a cópia GPU→staging é rápida; a leitura para a CPU fica no consumidor.
-    staging_.clear();
+    // Anel de texturas na GPU: o frame do WGC é copiado para um slot e o pool do WGC fica livre logo.
+    slots_.clear();
     slotWidth_.clear();
     slotHeight_.clear();
     {
@@ -95,7 +100,7 @@ bool ScreenCapture::startInternal(HMONITOR monitor, HWND window, int maxFps, int
         freeSlots_.clear();
     }
     for (int i = 0; i < slotCount; ++i) {
-        staging_.emplace_back();
+        slots_.emplace_back();
         slotWidth_.push_back(0);
         slotHeight_.push_back(0);
         if (!ensureSlotSize(i, width_, height_)) return fail(L"Memória de GPU insuficiente para os buffers de captura.");
@@ -165,7 +170,7 @@ void ScreenCapture::stop() {
 }
 
 bool ScreenCapture::ensureSlotSize(int slot, uint32_t width, uint32_t height) {
-    if (staging_[slot] && slotWidth_[slot] == width && slotHeight_[slot] == height) return true;
+    if (slots_[slot] && slotWidth_[slot] == width && slotHeight_[slot] == height) return true;
 
     D3D11_TEXTURE2D_DESC desc{};
     desc.Width = width;
@@ -174,12 +179,13 @@ bool ScreenCapture::ensureSlotSize(int slot, uint32_t width, uint32_t height) {
     desc.ArraySize = 1;
     desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     desc.SampleDesc.Count = 1;
-    desc.Usage = D3D11_USAGE_STAGING;
-    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    // Entrada do processador de vídeo (conversão de cor e escala) do encoder.
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 
     ComPtr<ID3D11Texture2D> texture;
     if (FAILED(device_->CreateTexture2D(&desc, nullptr, &texture))) return false;
-    staging_[slot] = texture;
+    slots_[slot] = texture;
     slotWidth_[slot] = width;
     slotHeight_[slot] = height;
     return true;
@@ -230,7 +236,11 @@ void ScreenCapture::onFrameArrived() {
                 releaseSlot(slot);
                 return;
             }
-            context_->CopyResource(staging_[slot].Get(), texture.Get());
+            // Logo após um resize, a superfície do frame pode ter o tamanho antigo: copia só a área em comum.
+            D3D11_TEXTURE2D_DESC source{};
+            texture->GetDesc(&source);
+            const D3D11_BOX box{0, 0, 0, std::min<UINT>(source.Width, width_), std::min<UINT>(source.Height, height_), 1};
+            context_->CopySubresourceRegion(slots_[slot].Get(), 0, 0, 0, 0, texture.Get(), 0, &box);
         }
 
         lastAcceptedTicks_ = now;
@@ -257,23 +267,9 @@ void ScreenCapture::releaseSlot(int slot) {
     freeSlots_.push_back(slot);
 }
 
-bool ScreenCapture::viewSlot(int slot, const std::function<void(const uint8_t*, int)>& fn) {
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    HRESULT hr = E_FAIL;
-    {
-        std::lock_guard d3d(d3dMutex_);
-        // Map espera a cópia da GPU terminar (sincronização implícita do contexto).
-        hr = context_->Map(staging_[slot].Get(), 0, D3D11_MAP_READ, 0, &mapped);
-    }
-    if (FAILED(hr)) return false;
-
-    fn(static_cast<const uint8_t*>(mapped.pData), static_cast<int>(mapped.RowPitch));
+bool ScreenCapture::useSlot(int slot, const std::function<bool(ID3D11Texture2D*)>& fn) {
+    if (slot < 0 || slot >= static_cast<int>(slots_.size())) return false;
     std::lock_guard d3d(d3dMutex_);
-    context_->Unmap(staging_[slot].Get(), 0);
-    return true;
-}
-
-void ScreenCapture::consumeSlot(int slot, const std::function<void(const uint8_t*, int)>& fn) {
-    viewSlot(slot, fn);
-    releaseSlot(slot);
+    // A ordem do contexto garante que a cópia do frame termina na GPU antes do que fn enfileirar.
+    return fn(slots_[slot].Get());
 }
